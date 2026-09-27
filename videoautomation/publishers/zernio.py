@@ -12,6 +12,7 @@ import time
 from datetime import timedelta
 from typing import Any
 
+from ..config import platform_spec
 from ..errors import ConfigError, PublishError
 from ..models import PostJob, PostResult
 from ..scheduler import iso, parse_iso, utcnow
@@ -100,13 +101,36 @@ class ZernioPublisher(Publisher):
             return {"title": o.get("title") or "New Short", "visibility": o.get("visibility") or s.youtube_visibility}
         if p == "snapchat":
             return {"contentType": o.get("content_type") or s.snapchat_content_type}
+        if p == "pinterest":
+            data = {"title": o.get("title") or job.caption[:100]}
+            if o.get("board_id") or s.pinterest_board_id:
+                data["boardId"] = o.get("board_id") or s.pinterest_board_id
+            if o.get("link") or s.pinterest_link:
+                data["link"] = o.get("link") or s.pinterest_link
+            if job.surface == "video_pin" and o.get("thumb_offset_ms") is not None:
+                data["coverImageKeyFrameTime"] = int(o["thumb_offset_ms"]) // 1000
+            return data
+        if p == "reddit":
+            data = {"title": o.get("title") or job.caption[:300]}
+            subreddit = o.get("subreddit") or s.reddit_subreddit
+            if subreddit:
+                data["subreddit"] = subreddit
+            if o.get("flair_id") or s.reddit_flair_id:
+                data["flairId"] = o.get("flair_id") or s.reddit_flair_id
+            if job.surface == "video":
+                data["nativeVideo"] = True
+            return data
         return {}
+
+    @staticmethod
+    def zernio_name(platform: str) -> str:
+        return platform_spec(platform).get("zernio_platform") or platform
 
     def build_body(self, job: PostJob) -> dict[str, Any]:
         body: dict[str, Any] = {
             "content": job.caption,
             "platforms": [{
-                "platform": job.platform,
+                "platform": self.zernio_name(job.platform),
                 "accountId": self.account_id(job.platform),
                 "platformSpecificData": self.platform_data(job),
             }],
@@ -157,7 +181,8 @@ class ZernioPublisher(Publisher):
 
     def _await(self, job: PostJob, post_id: str | None, post: dict[str, Any], notes: list[str]) -> PostResult:
         deadline = time.monotonic() + POLL_TIMEOUT
-        entry = _platform_entry(post, job.platform)
+        name = self.zernio_name(job.platform)
+        entry = _platform_entry(post, name)
         if not post_id and (entry.get("status") or post.get("status")) not in DONE:
             return PostResult(job.platform, job.surface, "submitted",
                               notes=notes + ["Zernio accepted the post but returned no id; check the Zernio dashboard"])
@@ -168,7 +193,7 @@ class ZernioPublisher(Publisher):
             self.sleep(POLL_SECONDS)
             post = _post_obj(call(self.session.get, self._url(f"posts/{post_id}"), headers=self.headers,
                                   timeout=60, context="Zernio post status"))
-            entry = _platform_entry(post, job.platform)
+            entry = _platform_entry(post, name)
 
         status = entry.get("status") or post.get("status")
         if status in ("failed", "error"):
@@ -178,7 +203,40 @@ class ZernioPublisher(Publisher):
         final = "draft" if job.options.get("draft") else "published"
         if final == "draft":
             notes = notes + ["sent to your TikTok inbox: open TikTok, add a sound, and post"]
-        return PostResult(job.platform, job.surface, final, url=url, remote_id=post_id, notes=notes)
+        return PostResult(job.platform, job.surface, final, url=url, remote_id=post_id, notes=notes,
+                          platform_post_id=entry.get("platformPostId"))
+
+    def post_status(self, post_id: str, platform: str) -> dict[str, Any]:
+        """Latest Zernio view of one platform entry (status, URL, platform post id)."""
+        post = _post_obj(call(self.session.get, self._url(f"posts/{post_id}"), headers=self.headers,
+                              timeout=60, context="Zernio post status"))
+        return _platform_entry(post, self.zernio_name(platform)) or {"status": post.get("status")}
+
+    def best_times(self, platform: str) -> list[tuple[int, int]]:
+        """(weekday 0=Mon, hour) pairs Zernio recommends, best first. Needs ZERNIO_PROFILE_ID
+        and the analytics add-on; returns [] when unavailable."""
+        if not self.settings.zernio_profile_id:
+            return []
+        try:
+            data = call(self.session.get, self._url("analytics/best-time"), headers=self.headers,
+                        params={"profileId": self.settings.zernio_profile_id, "platform": self.zernio_name(platform)},
+                        timeout=30, context="Zernio best time")
+        except PublishError:
+            return []
+        rows = data.get("bestTimes") or data.get("data") or data.get("slots") or []
+        days = {d: i for i, d in enumerate(("mon", "tue", "wed", "thu", "fri", "sat", "sun"))}
+        out: list[tuple[float, int, int]] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            day = row.get("dayOfWeek", row.get("day"))
+            hour = row.get("hour")
+            if isinstance(day, str):
+                day = days.get(day[:3].lower())
+            if isinstance(day, int) and isinstance(hour, int) and 0 <= day <= 6 and 0 <= hour <= 23:
+                out.append((float(row.get("score") or row.get("engagement") or 0), day, hour))
+        out.sort(reverse=True)
+        return [(d, h) for _, d, h in out]
 
     def list_accounts(self) -> list[dict[str, Any]]:
         data = call(self.session.get, self._url("accounts"), headers=self.headers, timeout=30,

@@ -6,6 +6,14 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+SECONDARY_SURFACES = ("story", "trial_reel", "trial_report")
+
+
+def label_for(platform: str, surface: str) -> str:
+    """Show the surface only when it is not the platform's main post type."""
+    return f"{platform} {surface.replace('_', ' ')}" if surface in SECONDARY_SURFACES else platform
+
+
 @dataclass
 class MediaInfo:
     """What ffprobe reports about one file."""
@@ -63,7 +71,7 @@ class PostJob:
 
     @property
     def label(self) -> str:
-        return self.platform if self.surface in ("reel", "video", "short", "spotlight") else f"{self.platform}:{self.surface}"
+        return label_for(self.platform, self.surface)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -88,6 +96,7 @@ class PostResult:
     error: str | None = None
     run_at: str | None = None
     notes: list[str] = field(default_factory=list)
+    platform_post_id: str | None = None  # the platform's own id (for insights)
 
     @property
     def ok(self) -> bool:

@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .. import auth
 from ..errors import ConfigError, PublishError
 from ..models import MediaFile, PostJob, PostResult
 from .base import Publisher, call
@@ -53,9 +54,10 @@ class _MetaBase(Publisher):
 class InstagramPublisher(_MetaBase):
     def _creds(self) -> tuple[str, str]:
         s = self.settings
-        if not s.ig_user_id or not s.ig_access_token:
-            raise ConfigError("Instagram direct posting needs IG_USER_ID and IG_ACCESS_TOKEN")
-        return s.ig_user_id, s.ig_access_token
+        token = auth.instagram_token(s, self.session)
+        if not s.ig_user_id or not token:
+            raise ConfigError("Instagram direct posting needs IG_USER_ID and IG_ACCESS_TOKEN (see `vauto auth meta`)")
+        return s.ig_user_id, token
 
     def publish(self, job: PostJob) -> PostResult:
         ig_id, token = self._creds()
@@ -90,7 +92,8 @@ class InstagramPublisher(_MetaBase):
         notes = []
         if surface == "trial_reel":
             notes.append("trial reel: shown to non-followers first")
-        return PostResult(job.platform, surface, "published", url=permalink, remote_id=media_id, notes=notes)
+        return PostResult(job.platform, surface, "published", url=permalink, remote_id=media_id, notes=notes,
+                          platform_post_id=media_id)
 
     def _check_quota(self, ig_id: str, token: str) -> None:
         """Fail early when the 24 h API publishing quota is used up (best effort)."""
@@ -210,7 +213,8 @@ class FacebookPublisher(_MetaBase):
                 url = link if link.startswith("http") else f"https://www.facebook.com{link}"
         except PublishError:
             pass
-        return PostResult(job.platform, job.surface, "published", url=url, remote_id=video_id, notes=notes)
+        return PostResult(job.platform, job.surface, "published", url=url, remote_id=video_id, notes=notes,
+                          platform_post_id=video_id)
 
     def _photos(self, page: str, token: str, job: PostJob) -> PostResult:
         if len(job.media) == 1:
@@ -231,3 +235,67 @@ class FacebookPublisher(_MetaBase):
         post_id = post.get("id")
         return PostResult(job.platform, job.surface, "published",
                           url=f"https://www.facebook.com/{post_id}", remote_id=post_id)
+
+
+# ----------------------------------------------------------------------- Threads
+
+
+class ThreadsPublisher(Publisher):
+    """Threads API (graph.threads.net). Media is fetched from a public URL."""
+
+    name = "threads"
+    base = "https://graph.threads.net/v1.0"
+
+    def _creds(self) -> tuple[str, str]:
+        token = auth.threads_token(self.settings, self.session)
+        if not self.settings.threads_user_id or not token:
+            raise ConfigError("Threads direct posting needs THREADS_USER_ID and THREADS_ACCESS_TOKEN")
+        return self.settings.threads_user_id, token
+
+    def _post(self, path: str, token: str, context: str, **data: Any) -> dict[str, Any]:
+        clean = {k: v for k, v in data.items() if v is not None}
+        return call(self.session.post, f"{self.base}/{path}", data={**clean, "access_token": token},
+                    timeout=120, context=context)
+
+    def _item(self, user: str, token: str, media: MediaFile, job: PostJob, **extra: Any) -> str:
+        url = self.ensure_url(media, job.post_id, job.platform)
+        kind = "VIDEO" if media.kind == "video" else "IMAGE"
+        key = "video_url" if kind == "VIDEO" else "image_url"
+        return self._post(f"{user}/threads", token, "Threads container", media_type=kind, **{key: url}, **extra)["id"]
+
+    def _wait(self, container: str, token: str) -> None:
+        deadline = time.monotonic() + PROCESS_TIMEOUT
+        while True:
+            data = call(self.session.get, f"{self.base}/{container}",
+                        params={"fields": "status,error_message", "access_token": token},
+                        timeout=60, context="Threads status")
+            status = data.get("status")
+            if status in ("FINISHED", "PUBLISHED"):
+                return
+            if status in ("ERROR", "EXPIRED"):
+                raise PublishError(f"Threads rejected the media: {data.get('error_message') or status}")
+            if time.monotonic() > deadline:
+                raise PublishError("Threads is still processing after 15 minutes", transient=True)
+            self.sleep(POLL_SECONDS)
+
+    def publish(self, job: PostJob) -> PostResult:
+        user, token = self._creds()
+        if len(job.media) == 1:
+            container = self._item(user, token, job.media[0], job, text=job.caption)
+        else:
+            children = [self._item(user, token, m, job, is_carousel_item="true") for m in job.media[:10]]
+            for child in children:
+                self._wait(child, token)
+            container = self._post(f"{user}/threads", token, "Threads carousel", media_type="CAROUSEL",
+                                   children=",".join(children), text=job.caption)["id"]
+        self._wait(container, token)
+        post_id = self._post(f"{user}/threads_publish", token, "Threads publish", creation_id=container)["id"]
+        url = None
+        try:
+            url = call(self.session.get, f"{self.base}/{post_id}",
+                       params={"fields": "permalink", "access_token": token},
+                       timeout=30, context="Threads permalink").get("permalink")
+        except PublishError:
+            pass
+        return PostResult(job.platform, job.surface, "published", url=url, remote_id=post_id,
+                          platform_post_id=post_id)

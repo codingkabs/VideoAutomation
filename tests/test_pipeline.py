@@ -25,6 +25,9 @@ class RecordingPublisher:
         self.jobs.append(job)
         return PostResult(job.platform, job.surface, "published", url=f"https://{job.platform}.example/{job.surface}")
 
+    def schedules_remotely(self, job):
+        return self.remote_schedule
+
 
 @pytest.fixture
 def fake_publishers(monkeypatch):
@@ -51,9 +54,12 @@ def test_video_plan_builds_jobs_and_trial(media_dir, settings):
     plan = build_plan(req, settings)
     surfaces = [(j.platform, j.surface) for j in plan.jobs]
     assert surfaces == [("instagram", "reel"), ("facebook", "reel"), ("tiktok", "video"),
-                        ("youtube", "short"), ("snapchat", "spotlight"), ("instagram", "trial_reel")]
-    main, trial = plan.jobs[0], plan.jobs[-1]
+                        ("youtube", "short"), ("snapchat", "spotlight"), ("instagram", "trial_reel"),
+                        ("instagram", "trial_report")]
+    main, trial, report = plan.jobs[0], plan.jobs[-2], plan.jobs[-1]
     assert trial.depends_on == main.idem_key
+    assert report.depends_on == trial.idem_key and report.backend == "insights"
+    assert parse_iso(report.run_at) - parse_iso(trial.run_at) == timedelta(hours=72)
     assert trial.options["trial_graduation"] == "MANUAL"
     assert trial.media[0].path != main.media[0].path
     delay = parse_iso(trial.run_at) - utcnow()
@@ -85,7 +91,7 @@ def test_execute_posts_now_and_queues_trial_locally(media_dir, settings, fake_pu
     results = execute(plan, settings, req)
     statuses = {(r.platform, r.surface): r.status for r in results}
     assert statuses == {("instagram", "reel"): "published", ("tiktok", "video"): "published",
-                        ("instagram", "trial_reel"): "queued"}
+                        ("instagram", "trial_reel"): "queued", ("instagram", "trial_report"): "queued"}
 
     # nothing runs before the scheduled time; the worker posts it afterwards
     store = JobStore(settings.db_path)
@@ -98,7 +104,7 @@ def test_execute_schedules_trial_remotely_on_zernio(media_dir, settings, fake_pu
     settings.backends["instagram"] = "zernio"
     req = request([media_dir / "landscape.mp4"], platforms=["instagram"], trial=True)
     results = execute(build_plan(req, settings), settings, req)
-    assert [r.status for r in results] == ["published", "published"]
+    assert [r.status for r in results] == ["published", "published", "queued"]
     trial_job = fake_publishers[("zernio", "instagram")].jobs[-1]
     assert trial_job.surface == "trial_reel" and trial_job.run_at
 

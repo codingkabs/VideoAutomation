@@ -12,21 +12,42 @@ from .normalize import AUDIO_ARGS, CONTAINER_ARGS, TARGET_H, TARGET_W, fit_graph
 MAX_LONG_EDGE = 2048
 
 
-def normalize_image(src: MediaInfo, out: Path, size: tuple[int, int] | None, fit: str = "auto") -> Path:
+def normalize_image(
+    src: MediaInfo,
+    out: Path,
+    size: tuple[int, int] | None,
+    fit: str = "auto",
+    max_bytes: int | None = None,
+) -> Path:
     """Write a high-quality JPEG. With ``size`` the image is fitted to that frame,
-    otherwise it keeps its shape with the long edge capped."""
+    otherwise it keeps its shape with the long edge capped. With ``max_bytes`` the
+    JPEG quality, then the dimensions, are reduced until the file fits."""
     out.parent.mkdir(parents=True, exist_ok=True)
     if size:
         w, h = size
-        mode = resolve_fit(fit, src.aspect, w / h)
-        graph = fit_graph("0:v", "img", mode, w, h) + ";[img]format=yuvj420p[v]"
     else:
         scale = min(1.0, MAX_LONG_EDGE / max(src.width, src.height))
         w = max(2, int(src.width * scale) // 2 * 2)
         h = max(2, int(src.height * scale) // 2 * 2)
-        graph = f"[0:v]scale={w}:{h},setsar=1,format=yuvj420p[v]"
-    run_ffmpeg(["-i", src.path, "-filter_complex", graph, "-map", "[v]", "-frames:v", "1", "-q:v", "2", str(out)])
-    return out
+
+    quality, shrink = 2, 1.0
+    while True:
+        tw, th = max(2, int(w * shrink) // 2 * 2), max(2, int(h * shrink) // 2 * 2)
+        if size:
+            mode = resolve_fit(fit, src.aspect, w / h)
+            graph = fit_graph("0:v", "img", mode, tw, th) + ";[img]format=yuvj420p[v]"
+        else:
+            graph = f"[0:v]scale={tw}:{th},setsar=1,format=yuvj420p[v]"
+        run_ffmpeg(["-i", src.path, "-filter_complex", graph, "-map", "[v]", "-frames:v", "1",
+                    "-q:v", str(quality), str(out)])
+        if not max_bytes or out.stat().st_size <= max_bytes:
+            return out
+        if quality < 10:
+            quality += 3
+        elif shrink > 0.3:
+            shrink *= 0.8
+        else:
+            raise MediaError(f"Could not get {Path(src.path).name} under {max_bytes // 1024} KB")
 
 
 def make_slideshow(

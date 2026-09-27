@@ -162,11 +162,16 @@ def adapt(
             title = title_from(text, spec.get("saved_story_title_max", 45))
             return PlatformCaption(text=title, title=title, notes=notes)
 
-    unit = "utf16" if platform == "tiktok" else "chars"
+    unit = spec.get("unit", "chars")
+    title = title_from(text, spec["title_max"]) if spec.get("title_max") else None
+    tags = hashtags(caption) if spec.get("tags") else []
+    if tags:
+        # Platforms with a separate tag field get the body without hashtags.
+        text = _tidy(HASHTAG_RE.sub("", text))
     if max_chars and text_length(text, unit) > max_chars:
         text = truncate_keep_tags(text, max_chars, unit)
         notes.append(f"shortened to {max_chars} characters")
-    return PlatformCaption(text=text, notes=notes)
+    return PlatformCaption(text=text, title=title, tags=tags, notes=notes)
 
 
 # ------------------------------------------------------------- Claude rewriting
@@ -181,6 +186,11 @@ For each platform, write the caption that platform's audience expects, within it
 - tiktok: punchy, a few relevant hashtags.
 - youtube: first line is the video title (under 90 characters, no hashtags); the rest is the description.
 - snapchat: one short line, at most 160 characters in total.
+- x, bluesky, threads, mastodon: short and conversational; threads allows one hashtag.
+- linkedin: professional tone, a clear takeaway, few hashtags.
+- pinterest: first line is the pin title; describe what the viewer gets.
+- reddit: first line is the post title; no hashtags.
+- any other platform: follow its usual style and stay within its limit.
 
 Return only the JSON object."""
 

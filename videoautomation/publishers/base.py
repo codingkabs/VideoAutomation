@@ -13,6 +13,7 @@ from ..config import Settings
 from ..errors import ConfigError, PublishError
 from ..models import MediaFile, PostJob, PostResult
 from ..storage import Storage
+from ..http import call, check, error_message, transient_status  # noqa: F401 (re-exported)
 
 
 class Publisher(ABC):
@@ -38,6 +39,10 @@ class Publisher(ABC):
     def publish(self, job: PostJob) -> PostResult:
         ...
 
+    def schedules_remotely(self, job: PostJob) -> bool:
+        """True when a future ``run_at`` can be handed to the platform right away."""
+        return self.remote_schedule
+
     def ensure_urls(self, job: PostJob, kinds: tuple[str, ...] = ("video", "image")) -> None:
         """Upload any media of the given kinds that has no public URL yet."""
         for media in job.media:
@@ -55,52 +60,3 @@ class Publisher(ABC):
         path = Path(media.path)
         media.url = self.storage.put(path, f"{post_id}/{path.name}")
         return media.url
-
-
-def transient_status(status: int) -> bool:
-    return status == 429 or status >= 500
-
-
-def error_message(resp: requests.Response) -> str:
-    try:
-        data = resp.json()
-    except ValueError:
-        return resp.text[:300] or f"HTTP {resp.status_code}"
-    if isinstance(data, dict):
-        err = data.get("error")
-        if isinstance(err, dict):
-            msg = err.get("error_user_msg") or err.get("message") or str(err)
-            code = err.get("code")
-            return f"{msg} (code {code})" if code else msg
-        if isinstance(err, str):
-            return err
-        if "message" in data:
-            return str(data["message"])
-    return str(data)[:300]
-
-
-def check(resp: requests.Response, context: str) -> dict[str, Any]:
-    """Return JSON for a 2xx response, otherwise raise PublishError."""
-    if resp.status_code >= 400:
-        transient = transient_status(resp.status_code)
-        try:
-            err = resp.json().get("error", {})
-            if isinstance(err, dict) and err.get("is_transient"):
-                transient = True
-        except (ValueError, AttributeError):
-            pass
-        raise PublishError(f"{context}: {error_message(resp)}", transient=transient)
-    try:
-        data = resp.json()
-    except ValueError:
-        return {}
-    return data if isinstance(data, dict) else {"data": data}
-
-
-def call(fn: Callable[..., requests.Response], *args: Any, context: str, **kwargs: Any) -> dict[str, Any]:
-    """Run a requests call, turning network failures into transient PublishErrors."""
-    try:
-        resp = fn(*args, **kwargs)
-    except (requests.ConnectionError, requests.Timeout) as exc:
-        raise PublishError(f"{context}: network error ({exc})", transient=True) from exc
-    return check(resp, context)

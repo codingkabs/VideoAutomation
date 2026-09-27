@@ -1,0 +1,71 @@
+# Browser automation flows for platforms without a posting API.
+#
+# Each flow is a list of steps run in a logged-in Chromium profile
+# (`vauto browser login <platform>` saves the login once).
+#
+# These flows could not be tested against the live sites while building vauto,
+# because they need your logged-in accounts. If a site changes or a step fails,
+# vauto saves a screenshot to ~/.vauto/browser/debug and (by default) hands the
+# post off to your phone instead. To fix a step without touching code, copy this
+# file, edit the selectors or button texts, and set VAUTO_BROWSER_FLOWS to it.
+#
+# Step actions:
+#   goto        url
+#   upload      selector (default: first input[type=file]); sends the video/photos
+#   fill        selectors (first visible one wins), value (supports {title}, {description}, {caption}, {tags})
+#   click       selector
+#   click_text  text: list of button labels (first visible match wins)
+#   wait        seconds
+#   wait_text   text: list; waits until any is visible (timeout_s)
+#   wait_url    contains: text the URL must contain (timeout_s)
+# Any step can be `optional: true` so a missing element is skipped.
+
+flows:
+  rutube:
+    login_url: https://studio.rutube.ru/
+    upload_url: https://studio.rutube.ru/videos
+    steps:
+      - {action: goto, url: "{upload_url}"}
+      - {action: click_text, text: ["Загрузить видео", "Загрузить", "Добавить видео", "Upload"], optional: true}
+      - {action: upload}
+      - {action: wait, seconds: 3}
+      - {action: fill, selectors: ["textarea[name='title']", "input[name='title']", "[placeholder*='Название']", "[data-testid*='title'] textarea"], value: "{title}", optional: true}
+      - {action: fill, selectors: ["textarea[name='description']", "[placeholder*='Описание']", "[data-testid*='description'] textarea"], value: "{description}", optional: true}
+      - {action: click_text, text: ["Опубликовать", "Publish"]}
+      - {action: wait_text, text: ["Опубликовано", "опубликовано", "Видео отправлено", "Published", "обрабатывается"], timeout_s: 900}
+
+  likee:
+    login_url: https://likee.video/
+    upload_url: https://likee.video/uploadvideo
+    steps:
+      - {action: goto, url: "{upload_url}"}
+      - {action: upload}
+      - {action: wait, seconds: 3}
+      - {action: fill, selectors: ["textarea", "[contenteditable='true']", "input[placeholder*='escription']"], value: "{caption}", optional: true}
+      - {action: click_text, text: ["Post", "Upload", "Publish", "Опубликовать"]}
+      - {action: wait_text, text: ["Success", "success", "Uploaded", "Posted", "Успешно"], timeout_s: 900}
+
+  dzen:
+    login_url: https://dzen.ru/
+    upload_url: https://dzen.ru/profile/editor
+    steps:
+      - {action: goto, url: "{upload_url}"}
+      - {action: click_text, text: ["Загрузить видео", "Видео", "Ролик", "Создать"], optional: true}
+      - {action: upload}
+      - {action: wait, seconds: 3}
+      - {action: fill, selectors: ["[placeholder*='Название']", "textarea[name='title']", "input[name='title']"], value: "{title}", optional: true}
+      - {action: fill, selectors: ["[placeholder*='Описание']", "textarea[name='description']", "[contenteditable='true']"], value: "{description}", optional: true}
+      - {action: click_text, text: ["Опубликовать", "Publish"]}
+      - {action: wait_text, text: ["Опубликовано", "опубликован", "Published"], timeout_s: 900}
+
+  naver_clip:
+    login_url: https://nid.naver.com/nidlogin.login
+    upload_url: https://tv.naver.com/my/upload
+    steps:
+      - {action: goto, url: "{upload_url}"}
+      - {action: click_text, text: ["클립 업로드", "업로드", "Upload"], optional: true}
+      - {action: upload}
+      - {action: wait, seconds: 3}
+      - {action: fill, selectors: ["textarea", "[contenteditable='true']", "input[placeholder*='제목']"], value: "{caption}", optional: true}
+      - {action: click_text, text: ["게시", "업로드", "완료", "Post"]}
+      - {action: wait_text, text: ["업로드 완료", "게시되었습니다", "완료", "Uploaded"], timeout_s: 900}

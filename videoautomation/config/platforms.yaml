@@ -1,32 +1,33 @@
 # Platform catalogue and posting limits.
 #
-# Tier 1 entries carry the specs the pipeline enforces. Other tiers are the
-# research catalogue: `status: planned` means no publisher exists yet.
-# Limits were checked September 2026; see docs/platform-research.md.
+# status:
+#   implemented  official API (direct or via Zernio)
+#   beta         browser automation or social-auto-upload; works like a person
+#                clicking through the site, so selectors may need updating
+#   handoff      phone-only app; vauto sends the ready file + caption to your
+#                phone (Telegram) or an outbox folder, and you tap post
+#   planned      researched, no route built yet
+#
+# surfaces: what gets created for a video post and for a photo set.
+#   photos: null means photo sets are turned into a slideshow video.
+# verify: true marks limits that came from a single secondary source.
+# Limits checked September 2026; see docs/platform-research.md.
 
 platforms:
 
-  # ---------------------------------------------------------------- Tier 1
+  # ======================================================== Tier 1: UK core
   instagram:
     name: Instagram
     tier: 1
     status: implemented
     regions: [global, uk]
-    backends: [meta, zernio]
+    backends: [meta, zernio, handoff]
     default_backend: meta
-    video:
-      min_s: 3
-      max_s: 180          # Reels up to 3 min keep full Reels distribution (API allows 15 min)
-      max_mb: 300
-      min_fps: 23
-      max_fps: 60
-    photos:
-      max_items: 10       # API carousel cap (the app allows 20)
-      max_mb: 8
-      size: [1080, 1350]  # 4:5
-    caption:
-      max_chars: 2200
-      max_hashtags: 5
+    zernio_platform: instagram
+    surfaces: {video: reel, photos: carousel}
+    video: {min_s: 3, max_s: 180, max_mb: 300, min_fps: 23, max_fps: 60}
+    photos: {max_items: 10, max_mb: 8, size: [1080, 1350]}
+    caption: {max_chars: 2200, max_hashtags: 5}
     rate_limit: "100 API posts per rolling 24 h"
 
   facebook:
@@ -34,21 +35,13 @@ platforms:
     tier: 1
     status: implemented
     regions: [global, uk]
-    backends: [meta, zernio]
+    backends: [meta, zernio, handoff]
     default_backend: meta
-    video:
-      min_s: 3
-      max_s: 90
-      max_mb: 1000
-      min_fps: 24
-      max_fps: 60
-    photos:
-      max_items: 10
-      max_mb: 10
-      size: null          # keep original aspect, long edge capped
-    caption:
-      max_chars: 63206
-      max_hashtags: null
+    zernio_platform: facebook
+    surfaces: {video: reel, photos: photos}
+    video: {min_s: 3, max_s: 90, max_mb: 1000, min_fps: 24, max_fps: 60}
+    photos: {max_items: 10, max_mb: 10, size: null}
+    caption: {max_chars: 63206, max_hashtags: null}
     rate_limit: "30 API Reels per rolling 24 h per Page"
 
   tiktok:
@@ -56,23 +49,13 @@ platforms:
     tier: 1
     status: implemented
     regions: [global, uk]
-    backends: [zernio]
+    backends: [zernio, tiktok, handoff]
     default_backend: zernio
-    video:
-      min_s: 3
-      max_s: 600          # per-creator; creator info may report less
-      max_mb: 4000
-      min_fps: 23
-      max_fps: 60
-    photos:
-      max_items: 35
-      max_mb: 20
-      size: [1080, 1920]
-    caption:
-      max_chars: 2200
-      max_hashtags: null
-      photo_title_max: 90
-      photo_description_max: 4000
+    zernio_platform: tiktok
+    surfaces: {video: video, photos: photos}
+    video: {min_s: 3, max_s: 600, max_mb: 4000, min_fps: 23, max_fps: 60}
+    photos: {max_items: 35, max_mb: 20, size: [1080, 1920]}
+    caption: {max_chars: 2200, max_hashtags: null, photo_title_max: 90, photo_description_max: 4000, unit: utf16}
     rate_limit: "~15 posts/day/creator across all apps; 5 drafts/24 h"
 
   youtube:
@@ -80,20 +63,13 @@ platforms:
     tier: 1
     status: implemented
     regions: [global, uk]
-    backends: [zernio]
+    backends: [zernio, handoff]
     default_backend: zernio
-    video:
-      min_s: 1
-      max_s: 180          # longer videos become regular uploads, not Shorts
-      max_mb: 10000
-      min_fps: 23
-      max_fps: 60
-    photos: null          # photo sets become a slideshow video
-    caption:
-      max_chars: 5000     # description
-      max_hashtags: null
-      title_max: 100
-      tags_max_chars: 500
+    zernio_platform: youtube
+    surfaces: {video: short, photos: null}
+    video: {min_s: 1, max_s: 180, max_mb: 10000, min_fps: 23, max_fps: 60}
+    photos: null
+    caption: {max_chars: 5000, max_hashtags: null, title_max: 100, tags_max_chars: 500}
     rate_limit: "100 uploads/day per API project"
 
   snapchat:
@@ -101,68 +77,313 @@ platforms:
     tier: 1
     status: implemented
     regions: [global, uk]
-    backends: [zernio]
+    backends: [zernio, handoff]
     default_backend: zernio
-    video:
-      min_s: 5
-      max_s: 60
-      max_mb: 500
-      min_fps: 23
-      max_fps: 60
-    photos: null          # one media item per post; photo sets become a slideshow
-    caption:
-      max_chars: 160      # Spotlight description
-      max_hashtags: null
-      saved_story_title_max: 45
+    zernio_platform: snapchat
+    surfaces: {video: spotlight, photos: null}
+    video: {min_s: 5, max_s: 60, max_mb: 500, min_fps: 23, max_fps: 60, verify: true}
+    photos: null
+    caption: {max_chars: 160, max_hashtags: null, saved_story_title_max: 45}
     rate_limit: "not published"
 
-  # ---------------------------------------------------------------- Tier 2
-  threads:      {name: Threads, tier: 2, status: planned, regions: [global], route: "Threads API / Zernio", notes: "250 posts/24 h, video <=5 min, 500 chars"}
-  x:            {name: X (Twitter), tier: 2, status: planned, regions: [global], route: "X API v2 pay-per-use / Zernio", notes: "~$0.015 per post, 2:20 video, 280 chars"}
-  linkedin:     {name: LinkedIn, tier: 2, status: planned, regions: [global], route: "Posts API (w_member_social) / Zernio", notes: "15 min video, vertical boosted"}
-  pinterest:    {name: Pinterest, tier: 2, status: planned, regions: [global], route: "API v5 / Zernio", notes: "video pins need a cover"}
-  bluesky:      {name: Bluesky, tier: 2, status: planned, regions: [global], route: "AT Protocol / Zernio", notes: "300 chars, 4 images"}
-  reddit:       {name: Reddit, tier: 2, status: planned, regions: [global], route: "Reddit API / Zernio", notes: "subreddit rules apply"}
-  tumblr:       {name: Tumblr, tier: 2, status: planned, regions: [global], route: "API v2 NPF", notes: ""}
-  telegram:     {name: Telegram channel, tier: 2, status: planned, regions: [global, ru, mena], route: "Bot API / Zernio", notes: "50 MB bot limit, 1024-char media caption"}
-  mastodon:     {name: Mastodon, tier: 2, status: planned, regions: [global], route: "Mastodon API", notes: "per-instance limits"}
-  discord:      {name: Discord, tier: 2, status: planned, regions: [global], route: "Webhook / Zernio", notes: ""}
-  vimeo:        {name: Vimeo, tier: 2, status: planned, regions: [global], route: "Upload API", notes: ""}
-  dailymotion:  {name: Dailymotion, tier: 2, status: planned, regions: [fr, global], route: "Upload API", notes: ""}
-  rumble:       {name: Rumble, tier: 2, status: planned, regions: [us, global], route: "simple-upload API (token on request)", notes: ""}
-  vk:           {name: VK Video / Clips, tier: 2, status: planned, regions: [ru, cis], route: "VK API video.save", notes: "Clips 5 s - 3 min"}
-  okru:         {name: OK.ru, tier: 2, status: planned, regions: [ru, cis], route: "OK API", notes: ""}
-  peertube:     {name: PeerTube, tier: 2, status: planned, regions: [global], route: "REST API", notes: ""}
-  odysee:       {name: Odysee, tier: 2, status: planned, regions: [global], route: "LBRY SDK", notes: ""}
-  google_business: {name: Google Business Profile, tier: 2, status: planned, regions: [global], route: "Business Profile API / Zernio", notes: "images only"}
+  # ============================================ Tier 2: global, official APIs
+  threads:
+    name: Threads
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [zernio, threads, handoff]
+    default_backend: zernio
+    zernio_platform: threads
+    surfaces: {video: video, photos: carousel}
+    video: {min_s: 1, max_s: 300, max_mb: 1000}
+    photos: {max_items: 10, max_mb: 8, size: null}
+    caption: {max_chars: 500, max_hashtags: 1}
+    rate_limit: "250 posts per 24 h"
 
-  # ---------------------------------------------------------------- Tier 3 (browser automation)
-  lemon8:       {name: Lemon8, tier: 3, status: planned, regions: [us, jp, sea], route: browser}
-  likee:        {name: Likee, tier: 3, status: planned, regions: [ru, sea, mena], route: browser}
-  kwai:         {name: Kwai, tier: 3, status: planned, regions: [br, latam, id], route: browser}
-  triller:      {name: Triller, tier: 3, status: planned, regions: [us, in], route: browser}
-  moj:          {name: Moj, tier: 3, status: planned, regions: [in], route: browser, notes: "Indian phone number"}
-  josh:         {name: Josh, tier: 3, status: planned, regions: [in], route: browser, notes: "Indian phone number"}
-  chingari:     {name: Chingari, tier: 3, status: planned, regions: [in], route: browser}
-  sharechat:    {name: ShareChat, tier: 3, status: planned, regions: [in], route: browser}
-  roposo:       {name: Roposo, tier: 3, status: planned, regions: [in], route: browser}
-  snack_video:  {name: Snack Video, tier: 3, status: planned, regions: [pk, id], route: browser}
-  naver_clip:   {name: Naver Clip, tier: 3, status: planned, regions: [kr], route: browser}
-  line_voom:    {name: LINE VOOM, tier: 3, status: planned, regions: [jp, th, tw], route: browser}
-  rutube:       {name: Rutube, tier: 3, status: planned, regions: [ru], route: browser, notes: "upload API by request only"}
-  dzen:         {name: Dzen, tier: 3, status: planned, regions: [ru], route: browser}
-  yappy:        {name: Yappy, tier: 3, status: planned, regions: [ru], route: browser}
-  zalo:         {name: Zalo, tier: 3, status: planned, regions: [vn], route: browser}
-  clapper:      {name: Clapper, tier: 3, status: planned, regions: [us], route: browser}
-  fanbase:      {name: Fanbase, tier: 3, status: planned, regions: [us], route: browser}
-  whatsapp_channels: {name: WhatsApp Channels, tier: 3, status: planned, regions: [global], route: browser}
-  facebook_groups:   {name: Facebook Groups, tier: 3, status: planned, regions: [global], route: browser}
+  x:
+    name: X (Twitter)
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [zernio, handoff]
+    default_backend: zernio
+    zernio_platform: twitter
+    surfaces: {video: video, photos: images}
+    video: {min_s: 1, max_s: 140, max_mb: 512}
+    photos: {max_items: 4, max_mb: 5, size: null}
+    caption: {max_chars: 280, max_hashtags: null}
+    rate_limit: "pay per use, about $0.015 per post"
 
-  # ---------------------------------------------------------------- Tier 4 (mainland China)
-  douyin:       {name: Douyin, tier: 4, status: planned, regions: [cn], route: "browser (social-auto-upload)"}
-  kuaishou:     {name: Kuaishou, tier: 4, status: planned, regions: [cn], route: "browser (social-auto-upload)"}
-  xiaohongshu:  {name: Xiaohongshu (RedNote), tier: 4, status: planned, regions: [cn], route: "browser (social-auto-upload)"}
-  wechat_channels: {name: WeChat Channels, tier: 4, status: planned, regions: [cn], route: "browser (social-auto-upload)"}
-  bilibili:     {name: Bilibili, tier: 4, status: planned, regions: [cn], route: "browser (social-auto-upload)"}
-  weibo:        {name: Weibo, tier: 4, status: planned, regions: [cn], route: browser}
-  baijiahao:    {name: Baijiahao, tier: 4, status: planned, regions: [cn], route: "browser (social-auto-upload)"}
+  linkedin:
+    name: LinkedIn
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [zernio, handoff]
+    default_backend: zernio
+    zernio_platform: linkedin
+    surfaces: {video: video, photos: images}
+    video: {min_s: 3, max_s: 600, max_mb: 5000}
+    photos: {max_items: 20, max_mb: 8, size: null}
+    caption: {max_chars: 3000, max_hashtags: null}
+    rate_limit: "~100 calls/day per member"
+
+  pinterest:
+    name: Pinterest
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [zernio, handoff]
+    default_backend: zernio
+    zernio_platform: pinterest
+    surfaces: {video: video_pin, photos: pin}
+    video: {min_s: 4, max_s: 900, max_mb: 2000}
+    photos: {max_items: 1, max_mb: 20, size: [1000, 1500]}
+    caption: {max_chars: 500, max_hashtags: null, title_max: 100}
+    rate_limit: "not published"
+
+  bluesky:
+    name: Bluesky
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [bluesky, zernio, handoff]
+    default_backend: bluesky
+    zernio_platform: bluesky
+    surfaces: {video: video, photos: images}
+    video: {min_s: 1, max_s: 180, max_mb: 100}
+    photos: {max_items: 4, max_mb: 0.95, size: null}
+    caption: {max_chars: 300, max_hashtags: null}
+    rate_limit: "daily video upload cap per account"
+
+  telegram:
+    name: Telegram channel
+    tier: 2
+    status: implemented
+    regions: [global, ru, mena]
+    backends: [telegram, zernio, handoff]
+    default_backend: telegram
+    zernio_platform: telegram
+    surfaces: {video: video, photos: album}
+    video: {min_s: 1, max_s: 0, max_mb: 50}
+    photos: {max_items: 10, max_mb: 10, size: null}
+    caption: {max_chars: 1024, max_hashtags: null}
+    rate_limit: "about 20 messages per minute per channel"
+
+  reddit:
+    name: Reddit
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [zernio, handoff]
+    default_backend: zernio
+    zernio_platform: reddit
+    surfaces: {video: video, photos: gallery}
+    video: {min_s: 1, max_s: 900, max_mb: 1000}
+    photos: {max_items: 20, max_mb: 20, size: null}
+    caption: {max_chars: 40000, max_hashtags: 0, title_max: 300}
+    rate_limit: "subreddit rules apply"
+
+  mastodon:
+    name: Mastodon
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [mastodon, handoff]
+    default_backend: mastodon
+    surfaces: {video: video, photos: images}
+    video: {min_s: 1, max_s: 0, max_mb: 40, verify: true}
+    photos: {max_items: 4, max_mb: 8, size: null}
+    caption: {max_chars: 500, max_hashtags: null}
+    rate_limit: "per instance"
+
+  discord:
+    name: Discord
+    tier: 2
+    status: implemented
+    regions: [global]
+    backends: [zernio, handoff]
+    default_backend: zernio
+    zernio_platform: discord
+    surfaces: {video: video, photos: images}
+    video: {min_s: 1, max_s: 0, max_mb: 25}
+    photos: {max_items: 10, max_mb: 8, size: null}
+    caption: {max_chars: 2000, max_hashtags: null}
+    rate_limit: "webhook limits"
+
+  tumblr:      {name: Tumblr, tier: 2, status: planned, regions: [global], route: "API v2 NPF"}
+  vimeo:       {name: Vimeo, tier: 2, status: planned, regions: [global], route: "Upload API"}
+  dailymotion: {name: Dailymotion, tier: 2, status: planned, regions: [fr, global], route: "Upload API"}
+  rumble:      {name: Rumble, tier: 2, status: planned, regions: [us, global], route: "simple-upload API (token on request)"}
+  vk:          {name: VK Video / Clips, tier: 2, status: planned, regions: [ru, cis], route: "VK API video.save"}
+  okru:        {name: OK.ru, tier: 2, status: planned, regions: [ru, cis], route: "OK API"}
+  peertube:    {name: PeerTube, tier: 2, status: planned, regions: [global], route: "REST API"}
+  odysee:      {name: Odysee, tier: 2, status: planned, regions: [global], route: "LBRY SDK"}
+  google_business: {name: Google Business Profile, tier: 2, status: planned, regions: [global], route: "Zernio (images only)"}
+
+  # ======================================= Tier 3: web uploaders (browser automation)
+  rutube:
+    name: Rutube
+    tier: 3
+    status: beta
+    regions: [ru]
+    backends: [browser, handoff]
+    default_backend: browser
+    surfaces: {video: video, photos: null}
+    video: {min_s: 1, max_s: 0, max_mb: 10000}
+    photos: null
+    caption: {max_chars: 5000, max_hashtags: null, title_max: 100, verify: true}
+
+  likee:
+    name: Likee
+    tier: 3
+    status: beta
+    regions: [ru, sea, mena]
+    backends: [browser, handoff]
+    default_backend: browser
+    surfaces: {video: video, photos: null}
+    video: {min_s: 3, max_s: 180, max_mb: 500, verify: true}
+    photos: null
+    caption: {max_chars: 150, max_hashtags: null, verify: true}
+
+  dzen:
+    name: Dzen
+    tier: 3
+    status: beta
+    regions: [ru]
+    backends: [browser, handoff]
+    default_backend: browser
+    surfaces: {video: video, photos: null}
+    video: {min_s: 1, max_s: 180, max_mb: 2000, verify: true}
+    photos: null
+    caption: {max_chars: 5000, max_hashtags: null, title_max: 100, verify: true}
+
+  naver_clip:
+    name: Naver Clip
+    tier: 3
+    status: beta
+    regions: [kr]
+    backends: [browser, handoff]
+    default_backend: browser
+    surfaces: {video: video, photos: null}
+    video: {min_s: 3, max_s: 180, max_mb: 1000, verify: true}
+    photos: null
+    caption: {max_chars: 1000, max_hashtags: null, verify: true}
+
+  # ============================== Tier 3: phone-only apps (hand-off to your phone)
+  lemon8:      {name: Lemon8, tier: 3, status: handoff, regions: [us, jp, sea], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: {max_items: 20, max_mb: 20, size: [1080, 1440]}, caption: {max_chars: 1000, max_hashtags: null, title_max: 50, verify: true}}
+  kwai:        {name: Kwai, tier: 3, status: handoff, regions: [br, latam, id], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  triller:     {name: Triller, tier: 3, status: handoff, regions: [us, in], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  moj:         {name: Moj, tier: 3, status: handoff, regions: [in], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}, notes: "Indian phone number"}
+  josh:        {name: Josh, tier: 3, status: handoff, regions: [in], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}, notes: "Indian phone number"}
+  chingari:    {name: Chingari, tier: 3, status: handoff, regions: [in], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  sharechat:   {name: ShareChat, tier: 3, status: handoff, regions: [in], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: {max_items: 10, max_mb: 20, size: null}, caption: {max_chars: 1000, max_hashtags: null}}
+  roposo:      {name: Roposo, tier: 3, status: handoff, regions: [in], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  snack_video: {name: Snack Video, tier: 3, status: handoff, regions: [pk, id], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  line_voom:   {name: LINE VOOM, tier: 3, status: handoff, regions: [jp, th, tw], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: {max_items: 20, max_mb: 20, size: null}, caption: {max_chars: 1000, max_hashtags: null}}
+  yappy:       {name: Yappy, tier: 3, status: handoff, regions: [ru], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  zalo:        {name: Zalo, tier: 3, status: handoff, regions: [vn], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: {max_items: 20, max_mb: 20, size: null}, caption: {max_chars: 1000, max_hashtags: null}}
+  clapper:     {name: Clapper, tier: 3, status: handoff, regions: [us], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: null}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: null, caption: {max_chars: 1000, max_hashtags: null}}
+  fanbase:     {name: Fanbase, tier: 3, status: handoff, regions: [us], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: {max_items: 10, max_mb: 20, size: null}, caption: {max_chars: 1000, max_hashtags: null}}
+  whatsapp_channels: {name: WhatsApp Channels, tier: 3, status: handoff, regions: [global], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 2000}, photos: {max_items: 10, max_mb: 20, size: null}, caption: {max_chars: 1000, max_hashtags: null}}
+  facebook_groups:   {name: Facebook Groups, tier: 3, status: handoff, regions: [global], backends: [handoff], default_backend: handoff, surfaces: {video: video, photos: photos}, video: {min_s: 1, max_s: 600, max_mb: 4000}, photos: {max_items: 10, max_mb: 20, size: null}, caption: {max_chars: 5000, max_hashtags: null}}
+
+  # ============================== Tier 4: mainland China (social-auto-upload)
+  douyin:
+    name: Douyin
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: douyin
+    sau_schedule: true
+    surfaces: {video: video, photos: note}
+    video: {min_s: 1, max_s: 900, max_mb: 4000}
+    photos: {max_items: 35, max_mb: 20, size: [1080, 1440]}
+    caption: {max_chars: 1000, max_hashtags: 5, title_max: 30, tags: true}
+
+  kuaishou:
+    name: Kuaishou
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: kuaishou
+    sau_schedule: true
+    surfaces: {video: video, photos: note}
+    video: {min_s: 1, max_s: 900, max_mb: 4000}
+    photos: {max_items: 30, max_mb: 20, size: [1080, 1440]}
+    caption: {max_chars: 1000, max_hashtags: 5, title_max: 20, tags: true}
+
+  xiaohongshu:
+    name: Xiaohongshu (RedNote)
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: xiaohongshu
+    sau_schedule: true
+    surfaces: {video: video, photos: note}
+    video: {min_s: 1, max_s: 900, max_mb: 4000}
+    photos: {max_items: 18, max_mb: 20, size: [1080, 1440]}
+    caption: {max_chars: 1000, max_hashtags: 10, title_max: 20, tags: true}
+
+  wechat_channels:
+    name: WeChat Channels
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: tencent
+    sau_schedule: true
+    surfaces: {video: video, photos: null}
+    video: {min_s: 1, max_s: 1800, max_mb: 4000}
+    photos: null
+    caption: {max_chars: 1000, max_hashtags: 10, title_max: 30, tags: true}
+
+  bilibili:
+    name: Bilibili
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: bilibili
+    sau_schedule: true
+    surfaces: {video: video, photos: null}
+    video: {min_s: 1, max_s: 0, max_mb: 8000}
+    photos: null
+    caption: {max_chars: 2000, max_hashtags: 10, title_max: 80, tags: true}
+
+  weibo:
+    name: Weibo
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: weibo
+    sau_schedule: false
+    surfaces: {video: video, photos: null}
+    video: {min_s: 1, max_s: 900, max_mb: 4000}
+    photos: null
+    caption: {max_chars: 2000, max_hashtags: 10, title_max: 30, tags: true}
+
+  baijiahao:
+    name: Baijiahao
+    tier: 4
+    status: beta
+    regions: [cn]
+    backends: [sau, handoff]
+    default_backend: sau
+    sau_platform: baijiahao
+    sau_schedule: false
+    surfaces: {video: video, photos: null}
+    video: {min_s: 1, max_s: 900, max_mb: 4000}
+    photos: null
+    caption: {max_chars: 1000, max_hashtags: 10, title_max: 30, tags: true}

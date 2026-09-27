@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>vauto</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bd6'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">▶</span> vauto</div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="post" aria-selected="true">Post</button>
+      <button role="tab" data-tab="queue">Queue</button>
+      <button role="tab" data-tab="trials">Trial results</button>
+      <button role="tab" data-tab="setup">Setup</button>
+      <button role="tab" data-tab="platforms">Platforms</button>
+    </nav>
+    <div id="ready-pill" class="pill">…</div>
+  </header>
+
+  <main>
+    <!-- ============================================================ POST -->
+    <section id="tab-post" class="tab active">
+      <div class="grid">
+        <div class="col">
+          <div class="card">
+            <h2>1. Video or photos</h2>
+            <label id="dropzone" class="dropzone" tabindex="0">
+              <input id="file-input" type="file" accept="video/*,image/*" multiple hidden>
+              <div class="dz-empty">
+                <div class="dz-icon">⬆</div>
+                <strong>Drop a video or up to 35 photos</strong>
+                <span class="muted">or click to choose</span>
+              </div>
+              <div id="file-previews" class="previews"></div>
+            </label>
+            <div id="upload-status" class="muted small"></div>
+          </div>
+
+          <div class="card">
+            <h2>2. Caption</h2>
+            <textarea id="caption" rows="6" placeholder="Write the caption once. vauto fits it to each platform: hashtag caps, lengths, titles."></textarea>
+            <div id="caption-meter" class="meters"></div>
+            <details id="overrides">
+              <summary>Different caption on a platform</summary>
+              <div id="override-fields" class="overrides"></div>
+            </details>
+            <label class="toggle"><input type="checkbox" id="opt-rewrite"> <span>Let Claude tailor the caption for each platform</span></label>
+          </div>
+          <div class="card">
+            <h2>3. Options</h2>
+            <div class="option-row">
+              <label class="toggle"><input type="checkbox" id="opt-trial"> <span><b>Instagram Trial Reel</b> — zoomed version for non-followers, later</span></label>
+            </div>
+            <div id="trial-options" class="sub-options" hidden>
+              <label>Delay <span class="muted">(minutes)</span>
+                <span class="inline"><input type="number" id="opt-delay-lo" min="0" value="60"> to <input type="number" id="opt-delay-hi" min="0" value="120"></span></label>
+              <label>Look
+                <select id="opt-trial-mode"><option value="static">Zoom in</option><option value="push">Slow push-in</option></select></label>
+              <label>Zoom <span id="zoom-value" class="muted">1.15×</span>
+                <input type="range" id="opt-zoom" min="1.05" max="1.5" step="0.01" value="1.15"></label>
+              <label>Hook text <span class="muted">(first 3 seconds)</span>
+                <input type="text" id="opt-hook" placeholder="e.g. Wait for the end"></label>
+              <label class="toggle"><input type="checkbox" id="opt-mirror"> <span>Mirror</span></label>
+              <label>If it does well
+                <select id="opt-graduation"><option value="MANUAL">Keep it trial-only (I decide)</option><option value="SS_PERFORMANCE">Share with followers automatically</option></select></label>
+            </div>
+            <div class="option-row"><label class="toggle"><input type="checkbox" id="opt-draft"> <span><b>TikTok drafts</b> — add a trending sound in the app</span></label></div>
+            <div class="option-row"><label class="toggle"><input type="checkbox" id="opt-story"> <span>Also an Instagram Story</span></label></div>
+            <div class="option-row">
+              <label>Subtitles
+                <select id="opt-subtitles"><option value="">Off</option><option value="auto">Automatic (speech to text)</option><option value="file">From a .srt / .vtt file</option></select></label>
+              <input type="file" id="subtitle-file" accept=".srt,.vtt" hidden>
+            </div>
+            <div class="option-row">
+              <label>When
+                <select id="opt-when"><option value="">Now</option><option value="best">Next best time</option><option value="custom">Pick a time</option></select></label>
+              <input type="datetime-local" id="opt-at" hidden>
+              <div id="best-note" class="muted small"></div>
+            </div>
+            <details>
+              <summary>More</summary>
+              <div class="sub-options">
+                <label>Fit to vertical
+                  <select id="opt-fit"><option value="auto">Auto</option><option value="blur">Blurred background</option><option value="crop">Crop to fill</option><option value="pad">Black bars</option></select></label>
+                <label class="toggle"><input type="checkbox" id="opt-trim"> <span>Trim to each platform's max length</span></label>
+                <label class="toggle"><input type="checkbox" id="opt-force"> <span>Post again even if already posted</span></label>
+              </div>
+            </details>
+          </div>
+
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <div class="card-head">
+              <h2>4. Where</h2>
+              <div class="quick">
+                <button class="link" data-pick="uk">UK core</button>
+                <button class="link" data-pick="ready">All ready</button>
+                <button class="link" data-pick="none">None</button>
+              </div>
+            </div>
+            <div id="platform-picker"></div>
+          </div>
+
+          <div class="actions sticky">
+            <button id="btn-preview" class="secondary" disabled>Preview</button>
+            <button id="btn-post" class="primary" disabled>Post</button>
+          </div>
+          <div id="progress" class="progress" hidden></div>
+        </div>
+      </div>
+
+      <div id="results" class="results" hidden></div>
+    </section>
+
+    <!-- ============================================================ QUEUE -->
+    <section id="tab-queue" class="tab">
+      <div class="card">
+        <div class="card-head"><h2>Posts and queue</h2><button class="link" id="refresh-queue">Refresh</button></div>
+        <div id="queue-list" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <!-- =========================================================== TRIALS -->
+    <section id="tab-trials" class="tab">
+      <div class="card">
+        <div class="card-head"><h2>Trial Reel results</h2><button class="link" id="refresh-trials">Refresh</button></div>
+        <p class="muted small">Main Reel vs its zoomed trial version. Numbers come from Instagram insights.</p>
+        <div id="trials-list"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ SETUP -->
+    <section id="tab-setup" class="tab">
+      <div class="card">
+        <div class="card-head"><h2>What's ready</h2><button class="link" id="test-online">Test connections</button></div>
+        <div id="checks"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Settings</h2><span id="settings-path" class="muted small"></span></div>
+        <p class="muted small">Saved to your .env file. Secrets stay hidden; leave them as dots to keep them.</p>
+        <form id="settings-form"></form>
+        <div class="actions"><button id="save-settings" class="primary">Save settings</button><span id="settings-status" class="muted small"></span></div>
+      </div>
+    </section>
+
+    <!-- ======================================================== PLATFORMS -->
+    <section id="tab-platforms" class="tab">
+      <div class="card">
+        <h2>All platforms</h2>
+        <p class="muted small">Official API routes post directly. Beta routes drive the website like a person. Hand-off sends the ready file and caption to your phone.</p>
+        <div id="platform-table" class="table-wrap"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vauto"
+version = "0.1.0"
+description = "Post one video or photo set to Instagram, TikTok, Facebook, YouTube Shorts, Snapchat and more."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+s3 = ["boto3>=1.34"]
+claude = ["anthropic>=1.8,<2"]
+dev = ["pytest>=8"]
+all = ["boto3>=1.34", "anthropic>=1.8,<2"]
+
+[project.scripts]
+vauto = "videoautomation.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["videoautomation*"]
+
+[tool.setuptools.package-data]
+videoautomation = ["config/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.env
+.vauto/
+*.mp4
+*.mov
+!tests/fixtures/*.mp4

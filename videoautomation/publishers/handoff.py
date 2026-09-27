@@ -15,7 +15,7 @@ from pathlib import Path
 from ..config import platform_spec
 from ..errors import PublishError
 from ..models import PostJob, PostResult
-from ..telegram_api import UPLOAD_LIMIT, TelegramAPI
+from ..telegram_api import TelegramAPI, upload_limit
 from .base import Publisher
 
 
@@ -47,11 +47,12 @@ class HandoffPublisher(Publisher):
         notes = []
         api.send_message(chat, f"📲 Ready to post on {name}. Save the file, open the app, paste the caption below.")
         files = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".mp4", ".jpg", ".jpeg", ".png"))
-        small = [p for p in files if p.stat().st_size <= UPLOAD_LIMIT]
+        limit = upload_limit(s.telegram_api_base)
+        small = [p for p in files if p.stat().st_size <= limit]
         for path in small[:10]:
             api.send_document(chat, path)  # sent as files so Telegram does not recompress them
         if len(small) < len(files):
-            notes.append(f"{len(files) - len(small)} file(s) over 50 MB stayed in {folder}")
+            notes.append(f"{len(files) - len(small)} file(s) over {limit // (1024 * 1024)} MB stayed in {folder}")
         if job.options.get("title"):
             api.send_message(chat, f"<b>Title</b>\n<pre>{html.escape(job.options['title'])}</pre>", parse_mode="HTML")
         if job.caption:

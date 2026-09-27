@@ -329,3 +329,73 @@ def test_web_blocks_csrf_and_rebinding(client):
     assert client.get("/api/status", headers={"Host": "evil.example:8765"}).status_code == 403
     assert client.post("/api/settings", json={"values": {}},
                        headers={"Origin": "http://localhost"}).status_code == 200
+
+
+def test_web_is_installable_and_accepts_shares(client, media_dir):
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200 and manifest.mimetype == "application/manifest+json"
+    data = manifest.get_json()
+    assert data["share_target"]["action"] == "/share" and data["display"] == "standalone"
+    for icon in data["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+    assert client.get("/sw.js").mimetype == "application/javascript"
+    assert b'rel="manifest"' in client.get("/").data
+
+
+@needs_ffmpeg
+def test_share_from_phone_loads_the_post_screen(client, media_dir):
+    # Android share sheet: a form POST without a same-site Origin, answered with a redirect
+    with open(media_dir / "landscape.mp4", "rb") as fh:
+        r = client.post("/share", data={"files": (fh, "edit.mp4"), "text": "From my phone"},
+                        content_type="multipart/form-data", headers={"Origin": "null"})
+    assert r.status_code == 303
+    location = r.headers["Location"]
+    assert "upload=" in location and "caption=From+my+phone" in location
+    upload_id = location.split("upload=")[1].split("&")[0]
+    info = client.get(f"/api/uploads/{upload_id}").get_json()
+    assert info["files"][0]["kind"] == "video" and info["files"][0]["name"] == "edit.mp4"
+    # iPhone Shortcut: asks for JSON and opens the returned link
+    with open(media_dir / "landscape.mp4", "rb") as fh:
+        j = client.post("/share?format=json", data={"files": (fh, "edit.mp4")},
+                        content_type="multipart/form-data").get_json()
+    assert j["open_url"].startswith("http://localhost/?upload=")
+    assert client.get("/api/uploads/does-not-exist").status_code == 400
+
+
+def test_share_needs_a_file(client):
+    assert client.post("/share", data={"text": "no file"}, content_type="multipart/form-data").status_code == 400
+
+
+def test_bot_reads_big_files_from_local_bot_api_server(bot, tmp_path):
+    from videoautomation.telegram_api import TelegramAPI
+
+    stored = tmp_path / "server" / "videos" / "file_1.mp4"
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(b"v" * 100)
+    session = FakeSession({("POST", "getFile"): FakeResponse(data={"ok": True, "result": {
+        "file_id": "F", "file_size": 100, "file_path": str(stored)}})})
+    api = TelegramAPI("T", "http://telegram-bot-api:8081", session)
+    out = api.download("F", tmp_path / "in" / "clip.mp4")
+    assert out.read_bytes() == b"v" * 100
+    # big files are accepted when a local server is configured
+    bot.settings.telegram_api_base = "http://telegram-bot-api:8081"
+    bot.handle_update(msg(video={"file_id": "F", "file_size": 300 * 1024 * 1024}, caption="big edit"))
+    assert bot.sessions[55].caption == "big edit"
+
+
+@needs_ffmpeg
+def test_share_link_uses_public_address(client, settings, media_dir):
+    settings.env["VAUTO_PUBLIC_URL"] = "https://mypc.tail1234.ts.net/"
+    with open(media_dir / "landscape.mp4", "rb") as fh:
+        j = client.post("/share?format=json", data={"files": (fh, "edit.mp4")},
+                        content_type="multipart/form-data").get_json()
+    assert j["open_url"].startswith("https://mypc.tail1234.ts.net/?upload=")
+
+
+def test_cli_phone_guide(monkeypatch, capsys, settings):
+    settings.web_password = "secret"
+    settings.env["VAUTO_PUBLIC_URL"] = "https://mypc.tail1234.ts.net"
+    code, out, _ = run_cli(monkeypatch, capsys, settings, "phone")
+    assert code == 0
+    assert "https://mypc.tail1234.ts.net/share?format=json" in out
+    assert "Basic dmF1dG86c2VjcmV0" in out  # base64 of vauto:secret

@@ -76,7 +76,10 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("TELEGRAM_OWNER_CHAT_ID", "Your chat id", "where hand-offs and notifications go"),
         Field("TELEGRAM_ALLOWED_USER_IDS", "Allowed user ids", "who may use the bot, comma-separated"),
         Field("TELEGRAM_CHANNEL_ID", "Channel to post to", "@channelname or -100… id; add the bot as admin"),
-        Field("TELEGRAM_API_BASE", "Bot API server", "leave empty unless you run a local Bot API server"),
+        Field("TELEGRAM_API_BASE", "Bot API server",
+              "for phone videos over 20 MB: http://telegram-bot-api:8081 with the docker bigfiles profile"),
+        Field("TELEGRAM_API_ID", "Telegram api_id", "my.telegram.org > API development tools; for the big-files server"),
+        Field("TELEGRAM_API_HASH", "Telegram api_hash", "for the big-files server", secret=True),
     )),
     ("more", "More platforms", (
         Field("BLUESKY_HANDLE", "Bluesky handle", "e.g. you.bsky.social"),
@@ -114,6 +117,7 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("VAUTO_BROWSER_FALLBACK_HANDOFF", "Send to phone if browser automation fails", kind="bool"),
         Field("VAUTO_WEB_PASSWORD", "Web app password", "required when the app is reachable from other devices",
               secret=True),
+        Field("VAUTO_PUBLIC_URL", "Phone address", "the https address your phone uses, e.g. from `tailscale serve`"),
     )),
 ]
 

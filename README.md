@@ -3,7 +3,7 @@
 Give `vauto` one video (or a set of photos) and a caption. It formats the media for each platform, fits the caption to each platform's rules, and publishes to every platform you pick: Instagram, Facebook, TikTok, YouTube Shorts, Snapchat and about 40 more.
 
 - **Instagram Trial Reels.** A zoomed-in version of your video goes out 1–2 hours later to non-followers, and vauto tells you 72 hours later which version won.
-- **Three ways to use it:** a web app, a Telegram bot on your phone, or the command line (and Claude Code can drive the command line for you).
+- **Made for phone editors:** finish your edit in CapCut or your gallery, tap **Share → vauto**, write the caption, post. It also works as a web app on your computer, a Telegram bot, or the command line (which Claude Code can drive for you).
 - **Subtitles, scheduling, best posting times, TikTok drafts for trending sounds, and per-platform captions** are built in.
 
 The research behind it, covering about 50 platforms, is in [docs/platform-research.md](docs/platform-research.md).
@@ -13,15 +13,17 @@ The research behind it, covering about 50 platforms, is in [docs/platform-resear
 ## Contents
 
 1. [What it posts where](#what-it-posts-where)
-2. [Install](#install)
-3. [Setup, step by step](#setup-step-by-step)
-4. [Using it](#using-it)
-5. [Trial Reels](#trial-reels)
-6. [Scheduling and best times](#scheduling-and-best-times)
-7. [Subtitles and music](#subtitles-and-music)
-8. [Phone-only apps, web uploaders and China](#phone-only-apps-web-uploaders-and-china)
-9. [Keeping it running](#keeping-it-running)
-10. [Troubleshooting](#troubleshooting)
+2. [Use it from your phone](#use-it-from-your-phone)
+3. [Install](#install)
+4. [Run it 24/7 with Docker](#run-it-247-with-docker)
+5. [Setup, step by step](#setup-step-by-step)
+6. [Using it](#using-it)
+7. [Trial Reels](#trial-reels)
+8. [Scheduling and best times](#scheduling-and-best-times)
+9. [Subtitles and music](#subtitles-and-music)
+10. [Phone-only apps, web uploaders and China](#phone-only-apps-web-uploaders-and-china)
+11. [Keeping it running](#keeping-it-running)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -48,6 +50,59 @@ Run `vauto platforms` to see every platform and whether it is set up.
 
 ---
 
+## Use it from your phone
+
+If you edit on your phone, this is the everyday flow:
+
+1. Export your edit from CapCut, InShot or your gallery.
+2. Tap **Share → vauto** (or share it to your vauto Telegram bot).
+3. The vauto app opens with the video loaded. Write the caption, tick the platforms and options, tap **Preview**, then **Post**.
+
+Your phone only sends the video; the work happens on a computer (or small server) that stays on. One-time setup:
+
+**1. Keep vauto running somewhere.** A home computer that stays on, a Mac mini, or a small cloud server (about £4 a month) all work. The easiest way is Docker: see [Run it 24/7 with Docker](#run-it-247-with-docker).
+
+**2. Set a password.** Set `VAUTO_WEB_PASSWORD` in `.env` (or in the Setup tab). vauto refuses to open to other devices without one.
+
+**3. Give it a secure address your phone can reach.** Phones only install web apps and accept shares over https. The simplest free option is [Tailscale](https://tailscale.com):
+
+- Install Tailscale on the computer and on your phone, and sign in to both with the same account.
+- On the computer, run `tailscale serve --bg 8765`. It prints an address like `https://your-pc.tail1234.ts.net`.
+- Set `VAUTO_PUBLIC_URL` to that address.
+
+This works from anywhere (home, mobile data, abroad) and nobody else can reach it. `vauto phone` prints all your exact values, including the ones for the iPhone Shortcut below.
+
+**4. Add vauto to your phone.**
+
+| Phone | How | Sharing into vauto |
+|---|---|---|
+| **Android** | Open your address in Chrome, menu → **Install app** | Built in: **Share → vauto** from Gallery, CapCut, Files and more |
+| **iPhone** | Open your address in Safari, **Share → Add to Home Screen** | iPhones don't let web apps appear in the share sheet, so add a Shortcut (below), or pick the video from Photos inside the app |
+| **Either** | Telegram: share the video to your vauto bot | See [Telegram bot](#telegram-bot); videos over 20 MB need the big-files server |
+
+**iPhone Shortcut for the share sheet** (about 2 minutes, once):
+
+1. Open **Shortcuts** → **+** → name it *Post with vauto*.
+2. Tap the **(i)**, turn on **Show in Share Sheet**, and set it to accept **Media**.
+3. Add **Get Contents of URL**:
+   - URL: `https://your-address/share?format=json`
+   - Method: **POST**, Request Body: **Form**
+   - Add a **File** field named `files` set to **Shortcut Input**
+   - Optional: add a **Text** field named `text` set to **Ask for Input**, to type the caption straight away
+   - Headers: `Authorization` = the `Basic …` value printed by `vauto phone`
+4. Add **Get Dictionary Value**, key `open_url`, from *Contents of URL*.
+5. Add **Open URLs**.
+
+Now **Share → Post with vauto** uploads the video and opens vauto with it loaded. Nothing is posted until you tap Post.
+
+**Big videos through Telegram.** Standard Telegram bots can only download 20 MB, which many phone edits exceed. The Docker setup includes Telegram's own server in "big files" mode (up to 2 GB):
+
+1. Get an `api_id` and `api_hash` at [my.telegram.org](https://my.telegram.org) → API development tools, and set `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` and `TELEGRAM_API_BASE=http://telegram-bot-api:8081`.
+2. Move your bot off Telegram's cloud server once: open `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/logOut` in a browser.
+3. Start it: `docker compose --profile bot --profile bigfiles up -d`.
+
+---
+
 ## Install
 
 You need Python 3.10+ and ffmpeg.
@@ -62,6 +117,27 @@ vauto doctor                       # shows what is ready and what is missing
 ```
 
 `.[all]` adds the web app, Claude caption rewriting, automatic subtitles, browser automation and S3/R2 storage. Smaller installs: `.[web]`, `.[claude]`, `.[subtitles]`, `.[browser]`, `.[s3]`.
+
+---
+
+## Run it 24/7 with Docker
+
+This runs the web app, the worker (scheduled posts, Trial Reels, results checks) and optionally the Telegram bot, restarting them automatically.
+
+```bash
+git clone <this repo> && cd VideoAutomation
+cp .env.example .env          # set VAUTO_WEB_PASSWORD at least; everything else can be done in the app
+mkdir -p data
+docker compose up -d          # web app on port 8765 + worker
+docker compose --profile bot up -d                        # + Telegram bot
+docker compose --profile bot --profile bigfiles up -d     # + phone videos over 20 MB via Telegram
+```
+
+- Open `http://localhost:8765` on the computer, or your Tailscale address on your phone.
+- Settings live in `.env`; renders, the queue and saved tokens live in `./data`.
+- After changing settings in the web app, run `docker compose restart` so the worker and bot pick them up.
+- Add `--build-arg EXTRAS=all` to `docker compose build` for automatic subtitles in the image (larger).
+- Browser-automation platforms (Rutube, Likee, Dzen, Naver Clip) need a visible browser for the one-time login, so run those from a normal install on a desktop.
 
 ---
 
@@ -143,7 +219,7 @@ vauto web          # opens on http://127.0.0.1:8765
 - **Setup:** what's ready, and every setting.
 - **Platforms:** all 50, their route and limits.
 
-To open it from your phone on the same Wi-Fi: set `VAUTO_WEB_PASSWORD`, then `vauto web --host 0.0.0.0`.
+To use it from your phone, see [Use it from your phone](#use-it-from-your-phone). Quick version on the same Wi-Fi: set `VAUTO_WEB_PASSWORD`, then `vauto web --host 0.0.0.0`.
 
 ### Telegram bot
 
@@ -151,7 +227,7 @@ To open it from your phone on the same Wi-Fi: set `VAUTO_WEB_PASSWORD`, then `va
 vauto bot
 ```
 
-Send your bot a video (as a **file**, so Telegram doesn't compress it) or photos, with the caption. Tap the buttons to turn on the Trial Reel, TikTok drafts, subtitles or best-time scheduling, **Preview**, then **Post**. Links come back in the chat. Standard Telegram bots can only download files up to 20 MB; use the web app for bigger videos.
+Send your bot a video (as a **file**, so Telegram doesn't compress it) or photos, with the caption. Tap the buttons to turn on the Trial Reel, TikTok drafts, subtitles or best-time scheduling, **Preview**, then **Post**. Links come back in the chat. Standard Telegram bots can only download files up to 20 MB; for bigger videos use the vauto app or the big-files server described in [Use it from your phone](#use-it-from-your-phone).
 
 ### Command line
 
@@ -178,6 +254,7 @@ vauto post clip.mp4 -c "..." --rewrite-captions                                 
 | `vauto browser login <platform>` | Save a login for Rutube, Likee, Dzen or Naver Clip |
 | `vauto variant clip.mp4 -o preview.mp4` | Preview a Trial Reel version locally |
 | `vauto accounts` | Accounts connected in Zernio |
+| `vauto phone` | Your exact values for using vauto from your phone |
 
 ### With Claude Code
 
@@ -241,6 +318,7 @@ sau douyin login --account default      # scan the QR code with the Douyin app
 
 Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial Reels, and the 72-hour results check) need `vauto worker` running at that time.
 
+- With Docker, the worker is already running (see [Run it 24/7 with Docker](#run-it-247-with-docker)).
 - On a computer that stays on: `vauto worker`, or a cron entry:
   ```
   */5 * * * * cd /path/to/VideoAutomation && vauto worker --once
@@ -264,7 +342,8 @@ Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial
 | Trial Reel never posted | The worker was not running, or connect Instagram in Zernio |
 | Instagram "limit reached" | 100 API posts per 24 h; wait |
 | Browser platform handed off to phone | The site changed; see the screenshot in `~/.vauto/browser/debug/` |
-| Bot says file too big | Telegram bots download 20 MB max; use the web app |
+| Bot says file too big | Telegram bots download 20 MB max; share to the vauto app, or turn on the big-files server |
+| Phone won't install the app or show "vauto" in Share | It needs an https address: use `tailscale serve` (see [Use it from your phone](#use-it-from-your-phone)); on iPhone use the Shortcut |
 
 ## Development
 

@@ -8,6 +8,7 @@ to 20 MB. A self-hosted Bot API server (TELEGRAM_API_BASE) lifts both to 2 GB.
 from __future__ import annotations
 
 import json
+import shutil
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,17 @@ from .errors import PublishError
 
 UPLOAD_LIMIT = 50 * 1024 * 1024
 DOWNLOAD_LIMIT = 20 * 1024 * 1024
+LOCAL_SERVER_LIMIT = 2000 * 1024 * 1024
+OFFICIAL_HOST = "api.telegram.org"
+
+
+def upload_limit(base: str) -> int:
+    """Bots upload 50 MB through Telegram's servers, 2 GB through a local Bot API server."""
+    return UPLOAD_LIMIT if OFFICIAL_HOST in base else LOCAL_SERVER_LIMIT
+
+
+def download_limit(base: str) -> int:
+    return DOWNLOAD_LIMIT if OFFICIAL_HOST in base else LOCAL_SERVER_LIMIT
 
 
 class TelegramAPI:
@@ -103,8 +115,19 @@ class TelegramAPI:
         size = info.get("file_size") or 0
         if "file_path" not in info:
             raise PublishError("Telegram did not return a download path (file too large for the Bot API?)")
-        url = f"{self.base}/file/bot{self.token}/{info['file_path']}"
         dest.parent.mkdir(parents=True, exist_ok=True)
+        file_path = info["file_path"]
+        if file_path.startswith("/"):
+            # A local Bot API server (--local) returns a path on its own disk.
+            source = Path(file_path)
+            if not source.is_file():
+                raise PublishError(
+                    f"The Bot API server stored the file at {file_path}, which this machine cannot read. "
+                    "Share the server's data folder with vauto (docker-compose does this for you)."
+                )
+            shutil.copyfile(source, dest)
+            return dest
+        url = f"{self.base}/file/bot{self.token}/{file_path}"
         try:
             with self.session.get(url, stream=True, timeout=600) as resp:
                 if resp.status_code >= 400:

@@ -533,8 +533,32 @@ function renderPlatformTable() {
   box.replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, ["Tier", "Platform", "Route", "Status", "Limits"].map((h) => el("th", {}, h)))), el("tbody", {}, rows)));
 }
 
+// ----------------------------------------------------- shared from the phone
+async function loadSharedUpload() {
+  const params = new URLSearchParams(location.search);
+  const uploadId = params.get("upload");
+  if (params.get("caption") && !$("#caption").value) $("#caption").value = params.get("caption");
+  if (!uploadId) return;
+  try {
+    state.upload = await api(`/api/uploads/${encodeURIComponent(uploadId)}`);
+    renderPreviews();
+    const video = state.upload.files.find((x) => x.kind === "video");
+    $("#upload-status").textContent = video
+      ? `Shared video ${video.width}×${video.height}, ${video.duration.toFixed(1)}s`
+      : `${state.upload.files.length} shared photo(s)`;
+    toast("Got it. Add your caption, pick platforms, then Preview or Post.");
+  } catch (err) { toast(err.message); }
+  history.replaceState(null, "", location.pathname + location.hash);
+  renderMeters();
+  updateButtons();
+}
+
 // --------------------------------------------------------------------- init
-loadStatus().then(() => {
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => { /* installing is optional */ });
+}
+loadStatus().then(async () => {
+  await loadSharedUpload();
   updateButtons();
   const tab = location.hash.replace("#", "");
   if (tab && $(`#tab-${tab}`)) showTab(tab);

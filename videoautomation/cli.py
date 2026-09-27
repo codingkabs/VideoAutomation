@@ -141,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("bot", help="run the Telegram bot: send it a video and caption from your phone")
 
+    phone = sub.add_parser("phone", help="show how to use vauto from your phone, with your exact values")
+    phone.add_argument("--port", type=int, default=8765)
+
     web = sub.add_parser("web", help="open the web app")
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=8765)
@@ -391,6 +394,72 @@ def cmd_bot(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _lan_addresses() -> list[str]:
+    import socket
+
+    found = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))  # no packet is sent; this picks the outward interface
+            found.append(s.getsockname()[0])
+    except OSError:
+        pass
+    return [a for a in found if not a.startswith("127.")]
+
+
+def _tailscale_name() -> str | None:
+    import shutil
+    import subprocess
+
+    if not shutil.which("tailscale"):
+        return None
+    try:
+        out = subprocess.run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=10)
+        name = json.loads(out.stdout).get("Self", {}).get("DNSName", "")
+        return name.rstrip(".") or None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def cmd_phone(args: argparse.Namespace, settings: Settings) -> int:
+    import base64
+
+    password = settings.web_password
+    public = (settings.env.get("VAUTO_PUBLIC_URL") or "").rstrip("/")
+    ts = _tailscale_name()
+    print("Use vauto from your phone\n")
+    print("1. Keep vauto running on a computer that stays on: `docker compose up -d` (or `vauto web` + `vauto worker`).")
+    if not password:
+        print("2. Set VAUTO_WEB_PASSWORD first. The app will not open to your phone without it.")
+    else:
+        print("2. Password: set.")
+    print("3. Give it an https address your phone can reach (needed to install the app and share into it):")
+    if ts:
+        print(f"   Tailscale is installed. Run:  tailscale serve --bg {args.port}")
+        print(f"   Then set VAUTO_PUBLIC_URL=https://{ts}")
+    else:
+        print("   Install Tailscale on this computer and your phone (free), then run:")
+        print(f"   tailscale serve --bg {args.port}   and set VAUTO_PUBLIC_URL to the https address it prints.")
+    for ip in _lan_addresses():
+        print(f"   On the same Wi-Fi you can also browse to http://{ip}:{args.port} (no install or sharing over http).")
+    base = public or (f"https://{ts}" if ts else "https://<your-address>")
+    print(f"\n4. Open {base} on your phone.")
+    print("   Android (Chrome): menu > Install app. Then share any video to 'vauto' from Gallery or CapCut.")
+    print("   iPhone (Safari): Share > Add to Home Screen. For the share sheet, make a Shortcut:")
+    print("     - Shortcut settings: Show in Share Sheet, accepts Media")
+    print(f"     - Get Contents of URL: {base}/share?format=json, Method POST, Request Body: Form,")
+    print("       field 'files' (File) = Shortcut Input, optional field 'text' = Ask for Input")
+    if password:
+        token = base64.b64encode(f"vauto:{password}".encode()).decode()
+        print(f"       Header  Authorization = Basic {token}")
+    else:
+        print("       Header  Authorization = Basic <run `vauto phone` again after setting the password>")
+    print("     - Get Dictionary Value 'open_url' from Contents of URL, then Open URLs")
+    print("\n5. Or use Telegram on either phone: share the video to your vauto bot (`vauto bot`).")
+    print("   Videos over 20 MB need the big-files server: README > Use it from your phone.")
+    return 0
+
+
 def cmd_web(args: argparse.Namespace, settings: Settings) -> int:
     from .web.app import run
 
@@ -419,7 +488,7 @@ def cmd_variant(args: argparse.Namespace, settings: Settings) -> int:
 COMMANDS = {
     "post": cmd_post, "worker": cmd_worker, "jobs": cmd_jobs, "trials": cmd_trials, "platforms": cmd_platforms,
     "accounts": cmd_accounts, "doctor": cmd_doctor, "best-time": cmd_best_time, "auth": cmd_auth,
-    "browser": cmd_browser, "bot": cmd_bot, "web": cmd_web, "probe": cmd_probe, "variant": cmd_variant,
+    "browser": cmd_browser, "bot": cmd_bot, "web": cmd_web, "phone": cmd_phone, "probe": cmd_probe, "variant": cmd_variant,
 }
 
 

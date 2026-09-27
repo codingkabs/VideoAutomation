@@ -1,0 +1,55 @@
+# vauto running 24/7 on a home computer or a small server.
+#
+#   cp .env.example .env            # then set VAUTO_WEB_PASSWORD at least
+#   mkdir -p data
+#   docker compose up -d            # web app on port 8765 + worker
+#   docker compose --profile bot up -d                 # + Telegram bot
+#   docker compose --profile bot --profile bigfiles up -d   # + phone videos over 20 MB
+#
+# After changing settings in the web app, run `docker compose restart` so the
+# worker and bot pick them up.
+
+x-vauto: &vauto
+  build: .
+  image: vauto:latest
+  restart: unless-stopped
+  working_dir: /config
+  environment:
+    VAUTO_HOME: /data
+  volumes:
+    - ./.env:/config/.env
+    - ./data:/data
+    - telegram-bot-api-data:/var/lib/telegram-bot-api
+
+services:
+  web:
+    <<: *vauto
+    command: ["vauto", "web", "--host", "0.0.0.0", "--port", "8765"]
+    ports:
+      - "8765:8765"
+
+  worker:
+    <<: *vauto
+    command: ["vauto", "worker", "--interval", "30"]
+
+  bot:
+    <<: *vauto
+    profiles: ["bot"]
+    command: ["vauto", "bot"]
+
+  # Self-hosted Telegram Bot API server: lets the bot receive phone videos up to
+  # 2 GB instead of 20 MB. Needs TELEGRAM_API_ID and TELEGRAM_API_HASH from
+  # my.telegram.org, and TELEGRAM_API_BASE=http://telegram-bot-api:8081 in .env.
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    profiles: ["bigfiles"]
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+
+volumes:
+  telegram-bot-api-data:

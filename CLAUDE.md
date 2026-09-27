@@ -22,6 +22,8 @@ Flags worth knowing:
 
 Never post without the user's go-ahead on the caption and platform list. A dry run is always safe.
 
+If the user asks about posting from their phone, point them to README "Use it from your phone" and `vauto phone` (installable web app with Share → vauto, an iPhone Shortcut, or the Telegram bot; `docker compose up -d` keeps it running 24/7).
+
 This session's machine may block the platform APIs (network policy) and is temporary, so anything queued locally (`vauto worker`) is lost when it ends. Prefer Zernio routes for scheduled posts here, or have the user run vauto on their own computer.
 
 ## Development

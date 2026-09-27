@@ -208,3 +208,10 @@ details.fgroup .fields { margin-top: .5rem; }
   .actions.sticky { position: sticky; bottom: 0; z-index: 5; background: var(--bg); padding: .6rem 0 .8rem;
     border-top: 1px solid var(--line); margin: 0 -.2rem; }
 }
+@media (max-width: 480px) {
+  .tabs button { padding: .4rem .55rem; font-size: .88rem; }
+  .brand { font-size: 1rem; }
+  .pill { font-size: .72rem; padding: .2rem .5rem; }
+  main { padding: .8rem .7rem 5rem; }
+  .card { padding: .9rem .85rem; }
+}

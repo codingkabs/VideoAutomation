@@ -23,7 +23,7 @@ from .config import Settings, platform_spec
 from .doctor import platform_ready
 from .errors import PublishError, VautoError
 from .scheduler import JobStore
-from .telegram_api import DOWNLOAD_LIMIT, TelegramAPI
+from .telegram_api import TelegramAPI, download_limit
 
 GROUP_SETTLE_SECONDS = 2.0
 HELP = (
@@ -163,10 +163,10 @@ class Bot:
 
     def _download(self, chat_id: int, media: dict[str, Any], index: int) -> Path:
         size = media.get("file_size") or 0
-        if size > DOWNLOAD_LIMIT and "api.telegram.org" in self.settings.telegram_api_base:
-            raise VautoError(f"That file is {size / 1e6:.0f} MB. Telegram bots can only download 20 MB. "
-                             "Send it through the web app (`vauto web`), trim it, or run a local Bot API "
-                             "server (TELEGRAM_API_BASE).")
+        if size > download_limit(self.settings.telegram_api_base):
+            raise VautoError(
+                f"That file is {size / 1e6:.0f} MB, over Telegram's 20 MB limit for bots. Share it to the vauto "
+                "app instead, or turn on the big-files server (README > Use it from your phone).")
         folder = self.inbox / str(chat_id) / datetime.now().strftime("%Y%m%d-%H%M%S")
         return self.api.download(media["file_id"], folder / f"media_{index:02d}{media['ext']}")
 

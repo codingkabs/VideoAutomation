@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ..errors import ConfigError, PublishError
 from ..models import PostJob, PostResult
-from ..telegram_api import UPLOAD_LIMIT, TelegramAPI, message_link
+from ..telegram_api import TelegramAPI, message_link, upload_limit
 from .base import Publisher
 
 
@@ -23,9 +23,11 @@ class TelegramPublisher(Publisher):
         api = self.api()
         channel = self.settings.telegram_channel_id
         paths = [Path(m.path) for m in job.media]
-        too_big = [p.name for p in paths if p.stat().st_size > UPLOAD_LIMIT]
-        if too_big and "api.telegram.org" in self.settings.telegram_api_base:
-            raise PublishError(f"Telegram bots can upload up to 50 MB; too big: {', '.join(too_big)}")
+        limit = upload_limit(self.settings.telegram_api_base)
+        too_big = [p.name for p in paths if p.stat().st_size > limit]
+        if too_big:
+            raise PublishError(f"Telegram bots can upload up to {limit // (1024 * 1024)} MB; too big: "
+                               f"{', '.join(too_big)}")
         caption = job.caption or None
         if len(paths) == 1:
             if job.media[0].kind == "video":

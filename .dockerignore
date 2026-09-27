@@ -1,0 +1,9 @@
+.git
+.env
+.vauto
+data
+tests
+**/__pycache__
+*.egg-info
+*.mp4
+*.mov

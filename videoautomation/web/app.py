@@ -34,7 +34,7 @@ TASK_TTL = 6 * 3600
 
 def create_app(settings: Settings):
     try:
-        from flask import Flask, Response, abort, jsonify, request, send_from_directory
+        from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
     except ImportError as exc:
         raise ConfigError("The web app needs Flask: pip install 'vauto[web]'") from exc
     from werkzeug.utils import secure_filename
@@ -60,7 +60,7 @@ def create_app(settings: Settings):
             return Response("Open vauto at http://127.0.0.1 or set VAUTO_WEB_PASSWORD", 403)
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("Origin")
-            if origin and origin.split("://", 1)[-1] != request.host:
+            if origin and origin.split("://", 1)[-1] != request.host and request.path != "/share":
                 return Response("Cross-site request blocked", 403)  # CSRF guard
             if request.path in ("/api/tasks", "/api/settings") and not request.is_json:
                 return Response("Expected JSON", 415)
@@ -164,27 +164,79 @@ def create_app(settings: Settings):
         return jsonify([c.to_dict() for c in run_checks(cfg(), online=online)])
 
     # --------------------------------------------------------------- upload
-    @app.post("/api/upload")
-    def upload():
-        files = request.files.getlist("files")
+    def public_base() -> str:
+        """The address your phone uses: VAUTO_PUBLIC_URL, else what the request came in on."""
+        configured = (cfg().env.get("VAUTO_PUBLIC_URL") or "").rstrip("/")
+        if configured:
+            return configured
+        scheme = "https" if request.headers.get("X-Forwarded-Proto") == "https" else request.scheme
+        return f"{scheme}://{request.host}"
+
+    def describe_upload(upload_id: str) -> dict[str, Any]:
+        folder = uploads / secure_filename(upload_id)
+        if not upload_id or not folder.is_dir():
+            raise VautoError("That upload no longer exists; add the video again")
+        out = []
+        for dest in sorted(p for p in folder.iterdir() if p.is_file() and not p.name.endswith(".poster.jpg")):
+            info = probe(dest)
+            kind = "image" if info.is_image else "video"
+            out.append({"name": dest.name.split("_", 1)[-1], "kind": kind, "width": info.width,
+                        "height": info.height, "duration": round(info.duration, 2), **media_item(kind, str(dest))})
+        return {"upload_id": folder.name, "files": out}
+
+    def store_upload(files) -> dict[str, Any]:
+        files = [f for f in files if f and f.filename]
         if not files:
             raise VautoError("No files received")
         upload_id = uuid.uuid4().hex[:12]
         folder = uploads / upload_id
         folder.mkdir(parents=True, exist_ok=True)
-        out = []
         for i, f in enumerate(files):
-            name = f"{i:02d}_{secure_filename(f.filename or 'file') or 'file'}"
-            dest = folder / name
+            dest = folder / f"{i:02d}_{secure_filename(f.filename) or 'file'}"
             f.save(dest)
             try:
-                info = probe(dest)
+                probe(dest)
             except VautoError as exc:
                 raise VautoError(f"{f.filename}: {exc}") from exc
-            kind = "image" if info.is_image else "video"
-            out.append({"name": f.filename, "kind": kind, "width": info.width, "height": info.height,
-                        "duration": round(info.duration, 2), **media_item(kind, str(dest))})
-        return jsonify({"upload_id": upload_id, "files": out})
+        return describe_upload(upload_id)
+
+    @app.post("/api/upload")
+    def upload():
+        return jsonify(store_upload(request.files.getlist("files")))
+
+    @app.get("/api/uploads/<upload_id>")
+    def get_upload(upload_id: str):
+        return jsonify(describe_upload(upload_id))
+
+    @app.post("/share")
+    def share():
+        """Share target for the installed app (Android) and the iPhone Shortcut.
+
+        Stores the shared video/photos and opens the Post screen with them loaded.
+        Nothing is posted until you press Post.
+        """
+        from urllib.parse import urlencode
+
+        files = request.files.getlist("files") or request.files.getlist("media")
+        data = store_upload(files)
+        caption = (request.form.get("text") or request.form.get("title") or "").strip()
+        query = {"upload": data["upload_id"]}
+        if caption:
+            query["caption"] = caption
+        target = "/?" + urlencode(query) + "#post"
+        if request.args.get("format") == "json":
+            return jsonify({**data, "open_url": public_base() + target})
+        return redirect(target, code=303)
+
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        return send_from_directory(STATIC, "manifest.webmanifest", mimetype="application/manifest+json")
+
+    @app.get("/sw.js")
+    def service_worker():
+        resp = send_from_directory(STATIC, "sw.js", mimetype="application/javascript")
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
     @app.post("/api/subtitles")
     def upload_subtitles():

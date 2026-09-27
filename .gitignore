@@ -10,3 +10,4 @@ dist/
 *.mp4
 *.mov
 !tests/fixtures/*.mp4
+data/

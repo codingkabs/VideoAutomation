@@ -4,7 +4,9 @@ import pytest
 
 from videoautomation import pipeline
 from videoautomation.media.variants import VariantOptions
-from videoautomation.models import PostResult
+from pathlib import Path
+
+from videoautomation.models import MediaFile, PostJob, PostResult
 from videoautomation.pipeline import PostRequest, build_plan, execute
 from videoautomation.scheduler import JobStore, parse_iso, run_due, utcnow
 
@@ -135,3 +137,58 @@ def test_dry_run_touches_no_database(media_dir, settings):
     results = execute(build_plan(req, settings), settings, req)
     assert {r.status for r in results} == {"dry_run"}
     assert not settings.db_path.exists()
+
+
+def test_scheduled_post_queues_meta_and_schedules_zernio(media_dir, settings, fake_publishers):
+    from videoautomation.scheduler import iso
+
+    settings.trial_backend = "meta"
+    at = iso(utcnow() + timedelta(hours=3))
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram", "tiktok"], trial=True, publish_at=at)
+    plan = build_plan(req, settings)
+    assert all(j.run_at for j in plan.jobs)
+    trial = next(j for j in plan.jobs if j.surface == "trial_reel")
+    assert parse_iso(trial.run_at) - parse_iso(at) >= timedelta(minutes=60)
+    results = {(r.platform, r.surface): r.status for r in execute(plan, settings, req)}
+    # Instagram waits locally, TikTok (Zernio) is scheduled remotely right away,
+    # the trial waits for its pending parent.
+    assert results[("instagram", "reel")] == "queued"
+    assert results[("tiktok", "video")] == "published"  # fake Zernio publisher accepted it
+    assert results[("instagram", "trial_reel")] == "queued"
+    assert fake_publishers[("zernio", "tiktok")].jobs[0].run_at == at
+
+
+def test_photos_respect_platform_size_caps(media_dir, settings):
+    settings.backends["bluesky"] = "bluesky"
+    req = request([media_dir / "a.png", media_dir / "b.jpg"], platforms=["bluesky", "lemon8", "pinterest"])
+    plan = build_plan(req, settings)
+    jobs = {j.platform: j for j in plan.jobs}
+    assert jobs["bluesky"].surface == "images"
+    assert all(Path(m.path).stat().st_size <= 0.95 * 1024 * 1024 for m in jobs["bluesky"].media)
+    assert jobs["lemon8"].backend == "handoff" and len(jobs["lemon8"].media) == 2
+    assert len(jobs["pinterest"].media) == 1  # one image per pin
+    assert any("only the first 1 of 2" in n for n in plan.notes)
+
+
+def test_subtitles_from_file_go_on_every_version(media_dir, settings, tmp_path):
+    srt = tmp_path / "subs.srt"
+    srt.write_text("1\n00:00:00,500 --> 00:00:02,000\nHello there\n")
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram", "tiktok"], trial=True, subtitles=str(srt))
+    plan = build_plan(req, settings)
+    main = next(j for j in plan.jobs if j.surface == "reel")
+    trial = next(j for j in plan.jobs if j.surface == "trial_reel")
+    assert "subs" in Path(main.media[0].path).name
+    assert Path(trial.media[0].path).with_suffix(".ass").is_file()
+
+
+def test_retry_runs_a_failed_job(media_dir, settings, monkeypatch):
+    from videoautomation import service
+
+    store = JobStore(settings.db_path)
+    job = PostJob("facebook", "reel", "meta", [MediaFile(str(media_dir / "landscape.mp4"), "video")], "c",
+                  idem_key="failedjob1", post_id="p")
+    store.insert(job, "running")
+    store.finish("failedjob1", PostResult("facebook", "reel", "failed", error="boom"))
+    monkeypatch.setattr(service, "publisher_factory", lambda s: (lambda j: RecordingPublisher("meta")))
+    result = service.retry(settings, "failedjob")
+    assert result.status == "published" and store.get("failedjob1").status == "published"

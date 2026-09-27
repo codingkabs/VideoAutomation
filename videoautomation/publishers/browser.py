@@ -144,7 +144,7 @@ def run_steps(page, flow: dict[str, Any], files: list[str], values: dict[str, st
         timeout_ms = int(step.get("timeout_s", 30) * 1000)
         what = f"step {number} ({action})"
         if action == "goto":
-            page.goto(_fill_template(step["url"], values), wait_until="domcontentloaded")
+            _open(page, _fill_template(step["url"], values))
             if "login" in page.url.lower() and "login" not in flow.get("upload_url", "").lower():
                 raise PublishError("not logged in; run `vauto browser login <platform>`")
         elif action == "upload":
@@ -235,12 +235,20 @@ class BrowserPublisher(Publisher):
                           notes=["posted through browser automation; check the post looks right"])
 
 
+def _open(page, url: str) -> None:
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+    except Exception as exc:  # network errors, DNS, blocked hosts
+        reason = str(exc).split("\n", 1)[0].replace("Page.goto: ", "")
+        raise PublishError(f"Could not open {url}: {reason}") from exc
+
+
 def login(settings: Settings, platform: str) -> str:
     """Open a visible browser on the platform's login page and keep the session."""
     flow = flow_for(settings, platform)
     with BrowserSession(settings, platform, headless=False) as browser:
         page = browser.page()
-        page.goto(flow["login_url"])
+        _open(page, flow["login_url"])
         input(f"Log in to {platform} in the browser window, then press Enter here to save the session... ")
     return str(browser.profile)
 
@@ -250,7 +258,7 @@ def check(settings: Settings, platform: str) -> bool:
     flow = flow_for(settings, platform)
     with BrowserSession(settings, platform, headless=True) as browser:
         page = browser.page()
-        page.goto(flow["upload_url"], wait_until="domcontentloaded")
+        _open(page, flow["upload_url"])
         try:
             page.locator("input[type=file]").first.wait_for(state="attached", timeout=20000)
             return True

@@ -472,8 +472,10 @@ async function loadChecks(online = false) {
   } catch (err) { box.replaceChildren(el("div", { class: "empty" }, err.message)); }
 }
 
+let settingsInitial = {};
 async function loadSettings() {
   const data = await api("/api/settings");
+  settingsInitial = Object.fromEntries(data.groups.flatMap((g) => g.fields.map((f) => [f.key, f.value])));
   $("#settings-path").textContent = data.path || "";
   const form = $("#settings-form");
   form.replaceChildren(...data.groups.map((g) => el("details", { class: "fgroup",
@@ -502,7 +504,8 @@ async function loadSetup() {
 $("#test-online").addEventListener("click", () => loadChecks(true));
 $("#save-settings").addEventListener("click", async (e) => {
   e.preventDefault();
-  const values = Object.fromEntries(new FormData($("#settings-form")).entries());
+  const values = Object.fromEntries([...new FormData($("#settings-form")).entries()]
+    .filter(([key, value]) => value !== (settingsInitial[key] ?? "")));
   try {
     const r = await api("/api/settings", { json: { values } });
     $("#settings-status").textContent = r.changed.length ? `Saved ${r.changed.length} setting(s)` : "No changes";

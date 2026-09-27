@@ -164,7 +164,7 @@ def adapt(
 
     unit = spec.get("unit", "chars")
     title = title_from(text, spec["title_max"]) if spec.get("title_max") else None
-    tags = hashtags(caption) if spec.get("tags") else []
+    tags = hashtags(text) if spec.get("tags") else []  # after the cap, so tags respect it
     if tags:
         # Platforms with a separate tag field get the body without hashtags.
         text = _tidy(HASHTAG_RE.sub("", text))

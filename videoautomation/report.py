@@ -32,22 +32,24 @@ def paint(text: str, status: str, colour: bool) -> str:
     return f"\033[{code}m{text}\033[0m" if colour and code else text
 
 
-def when(run_at: str | None) -> str:
+def when(run_at: str | None, tz=None) -> str:
+    """Show a stored UTC time in ``tz`` (your VAUTO_TIMEZONE) or the machine's zone."""
     if not run_at:
         return ""
     try:
-        dt = datetime.fromisoformat(run_at.replace("Z", "+00:00")).astimezone()
-        return dt.strftime("%a %d %b %H:%M")
+        dt = datetime.fromisoformat(run_at.replace("Z", "+00:00")).astimezone(tz)
+        return dt.strftime("%a %d %b %H:%M %Z").strip()
     except ValueError:
         return run_at
 
 
-def format_results(results: list[PostResult], notes: list[str] | None = None, colour: bool = False) -> str:
+def format_results(results: list[PostResult], notes: list[str] | None = None, colour: bool = False,
+                   tz=None) -> str:
     rows = []
     for r in results:
         detail = r.url or r.error or ""
         if r.run_at and r.status in ("scheduled", "queued", "dry_run"):
-            detail = f"at {when(r.run_at)}" + (f"  {detail}" if detail else "")
+            detail = f"at {when(r.run_at, tz)}" + (f"  {detail}" if detail else "")
         rows.append((label_for(r.platform, r.surface), r.status, STATUS_TEXT.get(r.status, r.status.upper()),
                      detail, r.notes))
     width = max((len(r[0]) for r in rows), default=8)

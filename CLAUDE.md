@@ -1,26 +1,32 @@
 # VideoAutomation
 
-`vauto` posts one video or photo set to Instagram, Facebook, TikTok, YouTube Shorts and Snapchat. See README.md for setup and docs/platform-research.md for the platform research.
+`vauto` posts one video or photo set to Instagram, Facebook, TikTok, YouTube Shorts, Snapchat and about 40 more platforms (official APIs, Zernio, browser automation, phone hand-off, and social-auto-upload for China). See README.md for setup and docs/platform-research.md for the research.
 
 ## When the user hands over media and a caption
 
 1. Make sure tools are installed: `ffmpeg -version` and `vauto --help`. If missing, run `apt-get install -y ffmpeg` (or the OS equivalent) and `pip install -e ".[all]"`.
-2. Run a dry run first and show the user the plan:
-   `vauto post <files> -c "<caption>" [--trial] [--tiktok-draft] --dry-run`
-3. If the plan looks right, run the same command without `--dry-run`.
-4. Report each platform's link or error from the output. Say plainly which platforms failed and why.
+2. Run `vauto doctor` if you are unsure what is set up.
+3. Run a dry run first and show the user the plan:
+   `vauto post <files> -c "<caption>" [--trial] [--tiktok-draft] [--at best] --dry-run`
+4. If the plan looks right and the user agrees, run the same command without `--dry-run`.
+5. Report each platform's link or error from the output. Say plainly which platforms failed and why.
 
 Flags worth knowing:
-- `--trial` adds the delayed, zoomed Instagram Trial Reel. `--trial-hook "text"` adds hook text.
+- `-p instagram,tiktok,x` picks platforms (default: VAUTO_PLATFORMS). `vauto platforms` lists them all.
+- `--trial` adds the delayed, zoomed Instagram Trial Reel; `--trial-hook "text"` adds hook text.
 - `--tiktok-draft` sends TikTok to drafts so the user can add a trending sound.
+- `--at best|18:30|tomorrow 9am|+2h` schedules the post.
+- `--subtitles auto` or `--subtitles file.srt` burns in captions.
 - `--trim` cuts videos to each platform's maximum length instead of skipping that platform.
 - `--caption-for tiktok="..."` sets a per-platform caption. You can write these yourself when the user asks for tailored captions.
-- `-p instagram,tiktok` limits platforms.
 
 Never post without the user's go-ahead on the caption and platform list. A dry run is always safe.
 
+This session's machine may block the platform APIs (network policy) and is temporary, so anything queued locally (`vauto worker`) is lost when it ends. Prefer Zernio routes for scheduled posts here, or have the user run vauto on their own computer.
+
 ## Development
 
-- Tests: `pytest` (needs ffmpeg; publishers are tested with fake HTTP sessions).
-- Platform limits live in `videoautomation/config/platforms.yaml`; update them there, not in code.
-- New platforms: add a publisher in `videoautomation/publishers/`, register it in `make_publisher`, and mark the platform `status: implemented` in the YAML.
+- Tests: `pytest` (needs ffmpeg; Chromium for the browser test; publishers use fake HTTP sessions).
+- Platform limits and routes live in `videoautomation/config/platforms.yaml`; update them there, not in code.
+- New platform: add it to the YAML (`status`, `backends`, `surfaces`, limits). A new route means a publisher in `videoautomation/publishers/`, registered in `BACKENDS` in `publishers/__init__.py`, plus a readiness rule in `doctor.platform_ready`.
+- Every setting is listed in `videoautomation/fields.py`; `.env.example` must contain each key (a test checks this).

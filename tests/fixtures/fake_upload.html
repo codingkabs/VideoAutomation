@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Fake uploader</title></head>
+<body>
+  <h1>Upload a video</h1>
+  <input type="file" id="file" style="display:none">
+  <div id="details" hidden>
+    <input id="title" placeholder="Title">
+    <textarea id="desc" placeholder="Description"></textarea>
+    <button id="publish">Publish</button>
+  </div>
+  <p id="done" hidden>Published!</p>
+  <script>
+    const file = document.getElementById("file");
+    file.addEventListener("change", () => {
+      if (file.files.length) document.getElementById("details").hidden = false;
+    });
+    document.getElementById("publish").addEventListener("click", () => {
+      const title = document.getElementById("title").value;
+      const desc = document.getElementById("desc").value;
+      if (!title || !desc || !file.files.length) return;
+      document.getElementById("done").hidden = false;
+      history.replaceState(null, "", "?submitted=" + encodeURIComponent(title));
+    });
+  </script>
+</body>
+</html>

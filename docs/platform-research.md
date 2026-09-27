@@ -14,7 +14,7 @@ Numbers change often. Every spec here was checked in September 2026, and each on
 - **Instagram Trial Reels can be posted by API.** You add a `trial_params` field to a Reel, so the zoomed follow-up post can be fully automatic.
 - **No platform lets an API add trending or library music.** Audio has to be baked into the video file. TikTok has two workarounds: auto-music on photo posts and sending the video to your drafts.
 - **About 20 more platforms have official APIs**, including Threads, X, LinkedIn, Pinterest, Bluesky, Reddit, Telegram, VK, Dailymotion and Rumble.
-- **The remaining ~25 have no posting API.** These include Lemon8, Likee, Kwai, Moj, Josh, Naver Clip and the Chinese apps. They can only be automated by driving a real browser, which breaks when the site changes and can breach the site's terms.
+- **The remaining ~25 have no posting API.** Four of them (Rutube, Likee, Dzen, Naver Clip) have web uploaders that a browser script can drive. The phone-only apps (Lemon8, Kwai, Moj, Josh and others) cannot be posted to from a computer, so vauto sends the finished file and caption to your phone. The Chinese apps go through the open-source social-auto-upload tool.
 
 ---
 
@@ -169,34 +169,38 @@ The tool's `--audio` flag adds a soundtrack to photo slideshows.
 
 ---
 
-## 7. Tier 3: no public posting API (browser automation only)
+## 7. Tier 3: no public posting API
 
-| Platform | Main markets | Notes |
-|---|---|---|
-| Lemon8 | US, Japan, SE Asia | ByteDance. No posting API; only scrapers exist |
-| Likee | Russia, SE Asia, Middle East | Web batch uploader exists; no API |
-| Kwai | Brazil, Latin America, Indonesia | Only ads (marketing) API is public |
-| Triller | US, India | Unofficial wrappers only |
-| Moj | India | ShareChat group; Indian phone number needed |
-| Josh | India | Indian phone number needed |
-| Chingari | India | — |
-| ShareChat | India | — |
-| Roposo | India | — |
-| Snack Video | Pakistan, Indonesia | Kuaishou-owned |
-| Naver Clip | South Korea | Internal JSON API with cookie auth only; Korean verification for some features |
-| LINE VOOM | Japan, Thailand, Taiwan | Posting through LINE VOOM Studio web UI for Official Accounts |
-| Rutube | Russia | No public upload API; access by request |
-| Dzen | Russia | Public API is read-only |
-| Yappy | Russia | — |
-| Zalo | Vietnam | — |
-| Clapper | US | — |
-| Fanbase | US | — |
-| WhatsApp Channels | Global | Business API cannot post to Channels |
-| Facebook Groups | Global | Group posting API removed in 2024 |
+These split into platforms with a **web uploader**, which a browser script can drive, and **phone-only apps**, which cannot be posted to from a computer at all.
+
+| Platform | Main markets | Posting from a computer | How vauto covers it |
+|---|---|---|---|
+| Rutube | Russia | Yes, Rutube Studio (studio.rutube.ru) | Browser automation (beta) |
+| Likee | Russia, SE Asia, Middle East | Yes, batch uploader (likee.video/uploadvideo) | Browser automation (beta) |
+| Dzen | Russia | Yes, Dzen Studio | Browser automation (beta) |
+| Naver Clip | South Korea | Yes, Clip Creator web upload | Browser automation (beta) |
+| Lemon8 | US, Japan, SE Asia | No; posting is app-only | Hand-off to your phone |
+| Kwai | Brazil, Latin America, Indonesia | No; app-only (emulators only) | Hand-off |
+| Triller | US, India | No | Hand-off |
+| Moj | India | No; Indian phone number needed | Hand-off |
+| Josh | India | No; Indian phone number needed | Hand-off |
+| Chingari | India | No | Hand-off |
+| ShareChat | India | No | Hand-off |
+| Roposo | India | No | Hand-off |
+| Snack Video | Pakistan, Indonesia | No | Hand-off |
+| LINE VOOM | Japan, Thailand, Taiwan | LINE VOOM Studio, Official Accounts only | Hand-off |
+| Yappy | Russia | No | Hand-off |
+| Zalo | Vietnam | No | Hand-off |
+| Clapper | US | No | Hand-off |
+| Fanbase | US | No | Hand-off |
+| WhatsApp Channels | Global | No; the Business API cannot post to Channels | Hand-off |
+| Facebook Groups | Global | No; group posting API removed in 2024 | Hand-off |
+
+**Hand-off** means vauto renders the right version, then sends the file and caption to your phone through your own Telegram bot (and saves them in an outbox folder). Posting takes a few taps.
 
 Browser automation risks:
-- Sites change their upload pages, so each script needs maintenance.
-- Automated posting can breach terms and may lead to rate limits or account restrictions. Use accounts you are prepared to have restricted, and post at human pace.
+- Sites change their upload pages without notice. vauto keeps the steps in an editable file, saves a screenshot when a step fails, and falls back to hand-off.
+- Automated posting can breach terms and may lead to rate limits or account restrictions. Post at human pace.
 - Many regional apps require a local phone number to register.
 
 ---
@@ -213,7 +217,9 @@ Browser automation risks:
 | Weibo | Microblog with video |
 | Baijiahao | Baidu content platform |
 
-Each account needs a Chinese phone number and real-name ID verification. Official open platforms exist for Douyin and others, but posting access is restricted to registered Chinese entities. The open-source project `dreammis/social-auto-upload` (Python + Playwright) already automates video and photo uploads with scheduling for Douyin, Kuaishou, Xiaohongshu, WeChat Channels, Bilibili, Baijiahao and TikTok. It is the planned basis for Phase 4.
+Each account needs a Chinese phone number and real-name ID verification. Official open platforms exist for Douyin and others, but posting access is restricted to registered Chinese entities.
+
+vauto posts to all seven through the open-source `dreammis/social-auto-upload` (MIT, Python + browser automation). It uploads videos, photo notes (Douyin, Kuaishou, Xiaohongshu) and schedules on the platform side (Douyin, Kuaishou, Xiaohongshu, WeChat Channels, Bilibili). Title limits vauto applies: Douyin 30, Kuaishou 20, Xiaohongshu 20, WeChat Channels 30, Bilibili 80, Weibo 30, Baijiahao 30 characters.
 
 ---
 
@@ -235,27 +241,30 @@ Zernio was chosen as the default: cheapest for a handful of accounts, covers all
 ## 10. How the automation works
 
 ```
-video/photos + caption
+video/photos + caption            (web app, Telegram bot, or command line)
         │
         ▼
- probe (ffprobe) ──► normalize to 1080×1920 H.264/AAC master
+ probe ──► vertical 1080×1920 master ──► optional burned-in subtitles
         │
-        ├─► per-platform renditions (duration trims, size caps)
-        ├─► per-platform captions (length, hashtag caps, titles)
-        ├─► trial variant (zoom / push-in, new cover, hook text)
-        │
-        ▼
- publish now, in parallel:
-   Instagram + Facebook ── Meta Graph API (direct, resumable upload)
-   TikTok, YouTube, Snapchat ── Zernio API
+        ├─► per-platform versions (length trims, size caps, photo sizes, slideshows)
+        ├─► per-platform captions (limits, hashtag caps, titles, tags; optional Claude rewrite)
+        ├─► Trial Reel version (zoom / push-in, hook text, new cover)
         │
         ▼
- Instagram Trial Reel +60–120 min
-   direct: local job queue (`vauto worker`)
-   Zernio: server-side `scheduledFor`
+ publish now or at a scheduled / best time, in parallel:
+   Instagram, Facebook ─────────── Meta Graph API (direct, resumable upload) or Zernio
+   TikTok, YouTube, Snapchat ───── Zernio (or free TikTok drafts)
+   Threads, X, LinkedIn, Pinterest, Reddit, Discord ── Zernio
+   Bluesky, Telegram, Mastodon, Threads ── free direct APIs
+   Rutube, Likee, Dzen, Naver Clip ── browser automation (beta)
+   Lemon8, Kwai, Moj, Josh, … ──── hand-off to your phone
+   Douyin, Kuaishou, Xiaohongshu, … ── social-auto-upload (beta)
         │
         ▼
- report: link or error for every platform
+ Instagram Trial Reel +60–120 min (Zernio schedules it, or the local worker)
+        │
+        ▼
+ results check +72 h: main vs trial, winner messaged to you
 ```
 
 See the README for setup and commands.
@@ -313,4 +322,13 @@ See the README for setup and commands.
 - Ayrshare vs Zernio pricing: https://zernio.com/alternatives/ayrshare
 - Postiz: https://github.com/gitroomhq/postiz-app
 - social-auto-upload: https://github.com/dreammis/social-auto-upload
+- social-auto-upload CLI (platforms, schedule, title limits): https://github.com/dreammis/social-auto-upload/blob/main/docs/CLI.md
+- Rutube Studio: https://studio.rutube.ru/
+- Likee batch uploader: https://likee.video/uploadvideo
+- Lemon8 posting is app-only: https://www.kingshiper.com/screen-mirroring/how-to-use-lemon8-pc.html
+- Kwai on PC via emulators only: https://www.ldplayer.net/apps/kwai-short-video-community-on-pc.html
+- Naver Clip PC upload: https://www.youtube.com/watch?v=KYZZIN3Y_W4
+- Zernio analytics (best time, post timeline): https://github.com/zernio-dev/zernio-api/blob/main/rules/analytics.md
+- TikTok drafts (inbox upload): https://developers.tiktok.com/docs/en/content-posting-api-reference-upload-video
+- Instagram resumable uploads: https://developers.facebook.com/docs/instagram-platform/content-publishing/resumable-uploads/
 - UK usage: https://birdeye.com/blog/social-media-sites-uk/

@@ -1,159 +1,278 @@
 # vauto: post once, publish everywhere
 
-Give `vauto` one video (or a set of photos) and a caption. It formats the media for each platform, adapts the caption to each platform's rules, and publishes to Instagram, Facebook, TikTok, YouTube Shorts and Snapchat in one go.
+Give `vauto` one video (or a set of photos) and a caption. It formats the media for each platform, fits the caption to each platform's rules, and publishes to every platform you pick: Instagram, Facebook, TikTok, YouTube Shorts, Snapchat and about 40 more.
 
-On Instagram it can also post a **Trial Reel** 1–2 hours later. That is a zoomed-in version of the same video, shown to non-followers first.
+- **Instagram Trial Reels.** A zoomed-in version of your video goes out 1–2 hours later to non-followers, and vauto tells you 72 hours later which version won.
+- **Three ways to use it:** a web app, a Telegram bot on your phone, or the command line (and Claude Code can drive the command line for you).
+- **Subtitles, scheduling, best posting times, TikTok drafts for trending sounds, and per-platform captions** are built in.
 
-The platform research behind this tool, covering about 50 platforms in the UK and worldwide, is in [docs/platform-research.md](docs/platform-research.md).
+The research behind it, covering about 50 platforms, is in [docs/platform-research.md](docs/platform-research.md).
 
-## What it does
+---
 
-| Platform | Video | Photos | Route |
-|---|---|---|---|
-| Instagram | Reel, optional Story, optional Trial Reel | Carousel (up to 10) or single image | Meta Graph API (direct), or Zernio |
-| Facebook Page | Reel | Single or multi-photo post | Meta Graph API (direct), or Zernio |
-| TikTok | Video, or send to drafts | Photo post with auto trending music | Zernio |
-| YouTube Shorts | Short with title and tags | Slideshow video | Zernio |
-| Snapchat | Spotlight, Saved Story or Story | Slideshow video | Zernio |
+## Contents
 
-For every post it will:
+1. [What it posts where](#what-it-posts-where)
+2. [Install](#install)
+3. [Setup, step by step](#setup-step-by-step)
+4. [Using it](#using-it)
+5. [Trial Reels](#trial-reels)
+6. [Scheduling and best times](#scheduling-and-best-times)
+7. [Subtitles and music](#subtitles-and-music)
+8. [Phone-only apps, web uploaders and China](#phone-only-apps-web-uploaders-and-china)
+9. [Keeping it running](#keeping-it-running)
+10. [Troubleshooting](#troubleshooting)
 
-- Convert the video to a vertical 1080×1920 H.264/AAC master. Landscape footage goes over a blurred fill, and near-vertical footage is cropped.
-- Check each platform's length and size limits. It trims (`--trim`) or reports the problem, so one platform's limit never blocks the rest.
-- Fit the caption. Instagram keeps 5 hashtags, YouTube gets a title plus `#Shorts` and tags, Snapchat gets 160 characters, and TikTok photo posts get a 90-character title.
-- Publish in parallel and print a link or a clear error for every platform.
-- Remember what it posted, so running the same command twice does not double-post.
+---
 
-## Setup
+## What it posts where
 
-### 1. Install
+| Group | Platforms | How |
+|---|---|---|
+| UK core | Instagram (Reels, carousels, Stories, Trial Reels), Facebook Page, TikTok, YouTube Shorts, Snapchat | Official APIs: Meta directly, the rest through Zernio |
+| Global | Threads, X, LinkedIn, Pinterest, Bluesky, Telegram channel, Reddit, Mastodon, Discord | Zernio, or free direct APIs (Bluesky, Telegram, Mastodon, Threads) |
+| Web uploaders (beta) | Rutube, Likee, Dzen, Naver Clip | Browser automation with your saved login; falls back to your phone if a site changes |
+| Phone-only apps | Lemon8, Kwai, Triller, Moj, Josh, Chingari, ShareChat, Roposo, Snack Video, LINE VOOM, Yappy, Zalo, Clapper, Fanbase, WhatsApp Channels, Facebook Groups | Hand-off: the ready file and caption arrive on your phone, you tap post |
+| China (beta) | Douyin, Kuaishou, Xiaohongshu, WeChat Channels, Bilibili, Weibo, Baijiahao | social-auto-upload (needs Chinese accounts) |
 
-Python 3.10+ and ffmpeg are required.
+For every post vauto:
+
+- converts video to vertical 1080×1920 H.264/AAC, over a blurred fill if it was landscape;
+- checks each platform's length and size limits, trimming (`--trim`), shrinking the file, or skipping just that platform with a clear reason;
+- fits the caption: Instagram keeps 5 hashtags, YouTube gets a title plus `#Shorts` and tags, X gets 280 characters, Snapchat 160, Reddit a title with no hashtags;
+- turns photo sets into carousels where supported and slideshows where not;
+- publishes in parallel, and reports a link or a plain-English error for each platform;
+- never double-posts: the same media and caption is recognised on a re-run.
+
+Run `vauto platforms` to see every platform and whether it is set up.
+
+---
+
+## Install
+
+You need Python 3.10+ and ffmpeg.
 
 ```bash
-# macOS: brew install ffmpeg      Ubuntu: sudo apt install ffmpeg
+# macOS: brew install ffmpeg      Ubuntu/Debian: sudo apt install ffmpeg      Windows: winget install ffmpeg
+git clone <this repo> && cd VideoAutomation
 pip install -e ".[all]"
+playwright install chromium        # only for Rutube/Likee/Dzen/Naver Clip
 cp .env.example .env
+vauto doctor                       # shows what is ready and what is missing
 ```
 
-### 2. Connect TikTok, YouTube and Snapchat through Zernio
+`.[all]` adds the web app, Claude caption rewriting, automatic subtitles, browser automation and S3/R2 storage. Smaller installs: `.[web]`, `.[claude]`, `.[subtitles]`, `.[browser]`, `.[s3]`.
 
-These three platforms keep API posts private until you pass their audits (Snapchat is invite-only). Zernio is already approved.
+---
 
-1. Create an account at zernio.com. The first 2 accounts are free, then about $6 per account per month.
-2. Connect TikTok, YouTube and your Snapchat Public Profile.
-3. Create an API key and put it in `.env` as `ZERNIO_API_KEY`.
+## Setup, step by step
+
+Every setting can be filled in from the web app (`vauto web`, then **Setup**), or by editing `.env`. `vauto doctor` (or the Setup tab) shows a tick or a fix for each item. Set up only the platforms you use.
+
+### 1. Zernio: TikTok, YouTube, Snapchat (and optionally more)
+
+TikTok and YouTube keep API uploads private until an app passes their audit, and Snapchat is invite-only. Zernio is already approved.
+
+1. Create an account at zernio.com (2 accounts free, then about $6 per account per month).
+2. Connect TikTok, YouTube and your Snapchat Public Profile. Connect X, LinkedIn, Pinterest, Reddit, Threads and Discord too if you want them.
+3. Create an API key and set `ZERNIO_API_KEY`.
 4. Run `vauto accounts` and copy the printed `ZERNIO_ACCOUNT_...` lines into `.env`.
 
-Zernio also hosts uploaded media, so no other storage is needed for these platforms.
+Zernio also hosts uploaded media, so no other storage is needed.
 
-### 3. Connect Instagram and Facebook
+### 2. Instagram and Facebook
 
-**Option A, simplest:** connect Instagram and Facebook in Zernio too. Set these in `.env`:
+**Easiest:** connect them in Zernio too, and set `VAUTO_BACKEND_INSTAGRAM=zernio`, `VAUTO_BACKEND_FACEBOOK=zernio` and their `ZERNIO_ACCOUNT_...` ids.
 
-```
-VAUTO_BACKEND_INSTAGRAM=zernio
-VAUTO_BACKEND_FACEBOOK=zernio
-ZERNIO_ACCOUNT_INSTAGRAM=...
-ZERNIO_ACCOUNT_FACEBOOK=...
-```
+**Free, direct Meta API (default):**
 
-**Option B, free, direct Meta API** (the default):
+1. Make your Instagram a Business or Creator account and link it to your Facebook Page.
+2. Create an app at developers.facebook.com (type Business). Set `META_APP_ID` and `META_APP_SECRET`.
+3. In the Graph API Explorer, create a user token with `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement` and `pages_manage_posts`.
+4. Run:
+   ```bash
+   vauto auth meta --user-token "<that token>" --write
+   ```
+   This finds your Page and its linked Instagram, and saves Page tokens that **never expire** into `.env`.
 
-1. Your Instagram account must be a Business or Creator account linked to a Facebook Page.
-2. Create an app at developers.facebook.com (type: Business). Add Instagram and Facebook Login for Business.
-3. In the Graph API Explorer, generate a user token with `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement` and `pages_manage_posts`. Exchange it for a long-lived token.
-4. `GET /me/accounts` gives your Page id and a Page access token. Put them in `FB_PAGE_ID` and `FB_PAGE_ACCESS_TOKEN`.
-5. `GET /{page-id}?fields=instagram_business_account` gives `IG_USER_ID`. Put the long-lived user token in `IG_ACCESS_TOKEN`.
+Tokens from Instagram Login (`META_GRAPH_HOST=graph.instagram.com`) last 60 days; vauto refreshes them automatically.
 
-Long-lived Instagram user tokens last 60 days, so refresh them before they expire. Your own accounts work while the app is in development mode, with no App Review.
+> Tip: even with the Meta route, connecting Instagram in Zernio (`ZERNIO_ACCOUNT_INSTAGRAM`) makes Trial Reels schedule on Zernio's servers, so nothing has to keep running on your computer.
 
-Reels and Trial Reels upload straight from disk. **Instagram photo posts need a public URL**, which comes from Zernio's media hosting (when `ZERNIO_API_KEY` is set) or from an R2/S3 bucket (`S3_*` settings).
+### 3. TikTok drafts for free (optional)
 
-### 4. Check everything without posting
+To send videos to your TikTok inbox without Zernio (so you can add a trending sound):
+
+1. Create an app at developers.tiktok.com with Login Kit and the Content Posting API, scope `video.upload`. No audit is needed for drafts.
+2. Set `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` and `VAUTO_BACKEND_TIKTOK=tiktok`.
+3. Run `vauto auth tiktok`, open the link, approve, then `vauto auth tiktok --code "<the URL you were sent to>"`.
+
+### 4. Telegram: phone bot, hand-offs and notifications (recommended)
+
+1. Message @BotFather, create a bot, set `TELEGRAM_BOT_TOKEN`.
+2. Start `vauto bot`, message your bot once; it replies with your user id. Set `TELEGRAM_ALLOWED_USER_IDS` and `TELEGRAM_OWNER_CHAT_ID` to it.
+3. To post to a Telegram channel too, add the bot as a channel admin and set `TELEGRAM_CHANNEL_ID`.
+
+### 5. Other free platforms
+
+| Platform | Settings |
+|---|---|
+| Bluesky | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` (Settings > Privacy > App passwords) |
+| Mastodon | `MASTODON_INSTANCE`, `MASTODON_ACCESS_TOKEN` (Preferences > Development) |
+| Threads direct | `VAUTO_BACKEND_THREADS=threads`, `THREADS_USER_ID`, `THREADS_ACCESS_TOKEN` |
+| Reddit | `REDDIT_SUBREDDIT` (and `REDDIT_FLAIR_ID` if required) |
+| Pinterest | `PINTEREST_BOARD_ID` (optional) |
+
+### 6. Storage for public links (only if needed)
+
+Instagram photo posts on the direct Meta route, and Threads direct, need media at a public URL. With `ZERNIO_API_KEY` set, Zernio hosts it. Otherwise set an S3 or Cloudflare R2 bucket (`S3_*` settings).
+
+---
+
+## Using it
+
+### Web app
 
 ```bash
-vauto post my-video.mp4 -c "My caption #uk" --trial --dry-run
+vauto web          # opens on http://127.0.0.1:8765
 ```
 
-This renders all the media and prints what each platform would receive.
+- **Post:** drop a video or photos, write the caption (live length and hashtag checks per platform), pick platforms, tick options, **Preview** to see every version with its caption and media, then **Post**.
+- **Queue:** everything posted, scheduled or waiting; cancel or retry.
+- **Trial results:** main Reel vs trial, side by side.
+- **Setup:** what's ready, and every setting.
+- **Platforms:** all 50, their route and limits.
 
-## Posting
+To open it from your phone on the same Wi-Fi: set `VAUTO_WEB_PASSWORD`, then `vauto web --host 0.0.0.0`.
+
+### Telegram bot
 
 ```bash
-# One video everywhere
-vauto post clip.mp4 -c "Morning routine that changed my life ☀️ #morning #routine"
-
-# Plus a Trial Reel 60-120 minutes later, zoomed 15%, with a hook caption
-vauto post clip.mp4 -c "..." --trial --trial-hook "Wait for the end"
-
-# Send TikTok to drafts so you can add a trending sound in the app
-vauto post clip.mp4 -c "..." --tiktok-draft
-
-# Photos: carousel on Instagram, photo post on TikTok, slideshow on YouTube/Snapchat
-vauto post 1.jpg 2.jpg 3.jpg -c "Which outfit? #autumn" --audio track.mp3
-
-# Only some platforms, with a different TikTok caption
-vauto post clip.mp4 -c "..." -p instagram,tiktok --caption-for tiktok="shorter tiktok caption #fyp"
-
-# Let Claude tailor the caption for each platform (needs ANTHROPIC_API_KEY)
-vauto post clip.mp4 -c "..." --rewrite-captions
+vauto bot
 ```
 
-Other commands:
+Send your bot a video (as a **file**, so Telegram doesn't compress it) or photos, with the caption. Tap the buttons to turn on the Trial Reel, TikTok drafts, subtitles or best-time scheduling, **Preview**, then **Post**. Links come back in the chat. Standard Telegram bots can only download files up to 20 MB; use the web app for bigger videos.
+
+### Command line
+
+```bash
+vauto post clip.mp4 -c "Morning routine that changed my life ☀️ #morning"      # everywhere
+vauto post clip.mp4 -c "..." --dry-run                                           # preview only
+vauto post clip.mp4 -c "..." --trial --trial-hook "Wait for the end"             # + Trial Reel
+vauto post clip.mp4 -c "..." --at best                                           # next best time
+vauto post clip.mp4 -c "..." --subtitles auto                                    # burned-in captions
+vauto post clip.mp4 -c "..." -p instagram,tiktok,x --caption-for x="short one"   # pick platforms
+vauto post 1.jpg 2.jpg 3.jpg -c "Which one? #autumn" --audio track.mp3           # photos
+vauto post clip.mp4 -c "..." --rewrite-captions                                  # Claude tailors captions
+```
 
 | Command | What it does |
 |---|---|
-| `vauto jobs` | Recent posts with links, errors and scheduled times |
-| `vauto worker` | Posts queued jobs when due (`--once` for cron) |
-| `vauto variant clip.mp4 -o preview.mp4 --mode push --hook "Part 2"` | Preview a Trial Reel variant locally |
-| `vauto platforms` | The full researched platform list and what is implemented |
+| `vauto doctor [--online]` | What's set up, what's missing, how to fix it |
+| `vauto platforms [--ready]` | Every platform with its route and status |
+| `vauto jobs [--cancel ID] [--retry ID]` | Recent posts and the queue |
+| `vauto trials` | Trial Reel results |
+| `vauto worker [--once]` | Posts queued jobs when due |
+| `vauto best-time` | The next best posting slot |
+| `vauto auth meta / tiktok / refresh / status` | Connect accounts, manage tokens |
+| `vauto browser login <platform>` | Save a login for Rutube, Likee, Dzen or Naver Clip |
+| `vauto variant clip.mp4 -o preview.mp4` | Preview a Trial Reel version locally |
 | `vauto accounts` | Accounts connected in Zernio |
-| `vauto probe file` | Media details |
 
-### Using it through Claude Code
+### With Claude Code
 
-Drop the video into a Claude Code session in this repository and say something like *"post this everywhere with the caption '…', and do a trial reel"*. Claude runs `vauto post` and reports the links.
+Drop a video into a Claude Code session in this repository and say *"post this everywhere with the caption '…', and do a trial reel"*. Claude runs a preview first, shows you the plan, and posts after you say go.
+
+---
 
 ## Trial Reels
 
-A Trial Reel is shown to non-followers first. It needs a public professional account with 1,000+ followers.
+A Trial Reel is shown only to non-followers at first. Instagram requires a public professional account with 1,000+ followers.
 
-- The variant is visibly different from the main Reel. `--trial-mode static` zooms in (default 1.15×), and `--trial-mode push` slowly zooms in over the clip. Optional extras are `--trial-hook` text, `--trial-mirror` and `--trial-speed 1.03`. It also gets a different cover frame. Instagram demotes near-duplicate content, so the difference matters.
-- `--trial-graduation MANUAL` (default) keeps it away from followers until you share it in the app. `SS_PERFORMANCE` lets Instagram share it automatically if it performs well.
-- The delay is random within `--trial-delay 60-120` minutes.
-- It is only posted if the main Reel published successfully.
+- **Different enough to count as new.** Instagram demotes near-duplicates, so the trial version is zoomed (`--trial-zoom`, default 1.15×) or slowly pushes in (`--trial-mode push`). You can add hook text (`--trial-hook`), mirror it (`--trial-mirror`) or speed it up slightly (`--trial-speed 1.03`). It also gets a different cover frame.
+- **Timing.** It posts at a random point in `--trial-delay 60-120` minutes after the main Reel, and only if the main Reel went out.
+- **Graduation.** `MANUAL` (default) keeps it away from your followers until you share it in the app. `SS_PERFORMANCE` lets Instagram share it automatically if it does well.
+- **Results.** 72 hours later vauto compares views, reach, likes, comments, shares and saves, picks a winner, and messages you on Telegram. See them any time with `vauto trials` or the Trial results tab.
 
-**Where the delayed post waits:**
+---
 
-- With an Instagram account connected in Zernio (`ZERNIO_ACCOUNT_INSTAGRAM`), the Trial Reel is scheduled on Zernio's servers. Nothing on your machine needs to keep running. This is the default whenever that account is set.
-- Otherwise it waits in the local queue in `~/.vauto/jobs.db`. Then `vauto worker` must be running on the same machine at the scheduled time, or a cron entry must call it:
+## Scheduling and best times
 
+`--at` (or **When** in the web app, **⏰** in the bot) accepts `now`, `best`, `18:30`, `6pm`, `tomorrow 9am`, `+2h`, `+90m` or `2026-10-01 18:30`. Times use `VAUTO_TIMEZONE` (default Europe/London).
+
+`best` picks the next slot from `VAUTO_BEST_TIMES`. The default is UK engagement peaks: weekdays 07:30, 12:30, 18:00, 20:30 and weekends 10:00, 19:30. With `ZERNIO_PROFILE_ID` and Zernio analytics, it uses your own audience's best hours instead.
+
+Posts routed through Zernio, and Chinese platforms, are scheduled on the platform's side. Direct Meta posts wait in vauto's local queue, so `vauto worker` must be running at that time (see below).
+
+---
+
+## Subtitles and music
+
+**Subtitles.** `--subtitles auto` transcribes the speech on your computer with faster-whisper (`pip install 'vauto[subtitles]'`; the model downloads on first use) and burns in short, bold 2–4 word captions. The transcript is saved as `subtitles.srt` in the render folder: fix any word and post again. Or pass your own file: `--subtitles captions.srt`. `--subtitle-style clean` gives smaller captions.
+
+**Music.** No platform lets an API add songs from its music library, so the audio in your file is what gets posted. Bake music in before posting, use `--tiktok-draft` to add a trending TikTok sound in the app, or post photos to TikTok, which adds a trending sound automatically.
+
+---
+
+## Phone-only apps, web uploaders and China
+
+**Phone-only apps** (Lemon8, Kwai, Moj, Josh and others) have no way to post from a computer. vauto prepares the right version and sends the file and caption to your Telegram, so posting takes a few taps: save the video, open the app, paste the caption. Everything is also saved in `~/.vauto/outbox/`.
+
+**Web uploaders** (Rutube, Likee, Dzen, Naver Clip) are driven like a person would, in a browser that keeps your login:
+
+```bash
+vauto browser login rutube     # log in once in the window that opens
+vauto browser check rutube     # confirm the upload page is reachable
+```
+
+These sites change their pages without notice. If a step fails, vauto saves a screenshot in `~/.vauto/browser/debug/` and sends the post to your phone instead. The steps live in `videoautomation/config/browser_flows.yaml`; copy it, adjust a button label or selector, and point `VAUTO_BROWSER_FLOWS` at your copy.
+
+**China** (Douyin, Kuaishou, Xiaohongshu, WeChat Channels, Bilibili, Weibo, Baijiahao) goes through the open-source [social-auto-upload](https://github.com/dreammis/social-auto-upload). Each account needs a Chinese phone number and ID verification.
+
+```bash
+git clone https://github.com/dreammis/social-auto-upload && cd social-auto-upload
+pip install -e . && patchright install chromium
+sau douyin login --account default      # scan the QR code with the Douyin app
+```
+
+---
+
+## Keeping it running
+
+Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial Reels, and the 72-hour results check) need `vauto worker` running at that time.
+
+- On a computer that stays on: `vauto worker`, or a cron entry:
   ```
   */5 * * * * cd /path/to/VideoAutomation && vauto worker --once
   ```
+- For the bot: run `vauto bot` on the same always-on machine.
+- In a Claude Code cloud session, the machine is temporary. Connect Instagram in Zernio so Trial Reels schedule on Zernio's side.
 
-  Cloud Claude Code sessions are temporary, so use the Zernio route there.
+`vauto doctor` warns when queued jobs are overdue because no worker ran.
 
-## Music
+**Cloud sessions and networks.** The machine vauto runs on must be allowed to reach the platform APIs (graph.facebook.com, zernio.com, open.tiktokapis.com, api.telegram.org, bsky.social and so on). Some sandboxed environments block these; run vauto on your own computer, or allow those hosts.
 
-No platform lets an API add songs from its music library. The audio in your file is what gets posted.
+---
 
-- Bake music into the video before posting, using original or royalty-free audio.
-- Use `--tiktok-draft` to add a trending TikTok sound in the app.
-- TikTok photo posts get a trending sound automatically.
+## Troubleshooting
 
-## Tests
+| Problem | Fix |
+|---|---|
+| A platform shows "needs setup" | `vauto doctor` names the missing setting |
+| "needs media at a public URL" | Set `ZERNIO_API_KEY` or an S3/R2 bucket |
+| Video too long for Facebook/Snapchat | Add `--trim`, or that platform is skipped |
+| Trial Reel never posted | The worker was not running, or connect Instagram in Zernio |
+| Instagram "limit reached" | 100 API posts per 24 h; wait |
+| Browser platform handed off to phone | The site changed; see the screenshot in `~/.vauto/browser/debug/` |
+| Bot says file too big | Telegram bots download 20 MB max; use the web app |
+
+## Development
 
 ```bash
 pip install -e ".[dev]"
 pytest
 ```
 
-Tests render real media with ffmpeg and use fake HTTP sessions, so no platform is contacted.
+The tests render real media with ffmpeg, drive a fake upload site in Chromium, and use fake HTTP sessions for every platform API, so nothing is posted.
 
-## Roadmap
-
-- **Phase 2:** Threads, X, LinkedIn, Pinterest, Bluesky, Telegram, Reddit, Tumblr, Mastodon, VK, Dailymotion, Vimeo, Rumble. Most are already reachable through Zernio or simple official APIs.
-- **Phase 3:** browser automation for platforms without APIs (Lemon8, Likee, Kwai, Moj, Josh, Naver Clip and others), for the accounts you actually have.
-- **Phase 4:** mainland China platforms (Douyin, Kuaishou, Xiaohongshu, WeChat Channels, Bilibili) through `social-auto-upload`, once local accounts exist.
+Code map: `pipeline.py` (plan and run a post), `media/` (ffmpeg), `captions.py`, `publishers/` (one file per route), `scheduler.py` (queue), `insights.py` (Trial results), `timing.py` (scheduling), `bot.py`, `web/`, `doctor.py`, `config/platforms.yaml` (every platform's limits and routes).

@@ -153,7 +153,11 @@ def run_checks(settings: Settings, online: bool = False) -> list[Check]:
     except Exception as exc:
         checks.append(Check("setup", "public media storage", "fail", str(exc)))
 
-    trial_backend = settings.trial_backend_for() if "instagram" in settings.backends else "n/a"
+    try:
+        trial_backend = settings.trial_backend_for() if "instagram" in settings.backends else "n/a"
+    except Exception as exc:
+        trial_backend = "n/a"
+        checks.append(Check("setup", "Trial Reel route", "fail", str(exc)))
     local = trial_backend == "meta"
     checks.append(Check("setup", "Trial Reel scheduling", "warn" if local else "ok",
                         "local queue: `vauto worker` must be running at post time" if local

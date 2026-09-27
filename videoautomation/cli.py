@@ -18,6 +18,7 @@ from .media.variants import VariantOptions, render_variant
 from .publishers import ZernioPublisher
 from .report import format_checks, format_results, paint, results_json, summary_line, use_colour, when
 from .scheduler import JobStore, worker_loop
+from .timing import zone
 
 
 def _minutes(value: str) -> tuple[int, int]:
@@ -201,7 +202,7 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
         if req.dry_run:
             header += "  [preview only: nothing was posted]"
         print(paint(header, "off", colour) if colour else header)
-        print(format_results(results, plan.notes, colour))
+        print(format_results(results, plan.notes, colour, zone(settings)))
         print(f"\n{summary_line(results)}")
     if not req.dry_run:
         service.notify_results(settings, results, f"vauto post {plan.post_id}")
@@ -218,8 +219,8 @@ def cmd_worker(args: argparse.Namespace, settings: Settings) -> int:
     try:
         for result in worker_loop(store, publisher_for, interval=args.interval, once=args.once):
             failed = failed or result.status == "failed"
-            print(format_results([result], colour=colour), flush=True)
-            if result.status != "queued":
+            print(format_results([result], colour=colour, tz=zone(settings)), flush=True)
+            if result.status not in ("queued", "reported"):  # reports message you themselves
                 service.notify_results(settings, [result], "vauto worker")
     except KeyboardInterrupt:
         return 0
@@ -245,7 +246,7 @@ def cmd_jobs(args: argparse.Namespace, settings: Settings) -> int:
         r = row.result
         detail = (r.url or r.error or "") if r else ""
         status = paint(f"{row.status:<10}", row.status if row.status != "pending" else "queued", colour)
-        print(f"{row.idem_key[:8]}  {when(row.run_at):<16} {row.job.label:<22} {status} {detail}")
+        print(f"{row.idem_key[:8]}  {when(row.run_at, zone(settings)):<20} {row.job.label:<22} {status} {detail}")
     return 0
 
 

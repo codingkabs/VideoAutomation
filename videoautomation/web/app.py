@@ -52,8 +52,18 @@ def create_app(settings: Settings):
 
     # ------------------------------------------------------------- security
     @app.before_request
-    def require_password():
+    def guard():
         password = cfg().web_password
+        host = (request.host or "").rsplit(":", 1)[0].strip("[]")
+        if not password and host not in LOOPBACK:
+            # Blocks DNS-rebinding: without a password only localhost names are served.
+            return Response("Open vauto at http://127.0.0.1 or set VAUTO_WEB_PASSWORD", 403)
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            origin = request.headers.get("Origin")
+            if origin and origin.split("://", 1)[-1] != request.host:
+                return Response("Cross-site request blocked", 403)  # CSRF guard
+            if request.path in ("/api/tasks", "/api/settings") and not request.is_json:
+                return Response("Expected JSON", 415)
         if not password:
             return None
         auth = request.authorization
@@ -259,7 +269,7 @@ def create_app(settings: Settings):
 
     @app.post("/api/tasks")
     def start_task():
-        body = request.get_json(force=True) or {}
+        body = request.get_json() or {}
         action = body.get("action")
         if action not in ("preview", "post"):
             raise VautoError("action must be preview or post")
@@ -342,8 +352,12 @@ def create_app(settings: Settings):
 
     @app.post("/api/settings")
     def save_settings():
+        from ..config import parse_dotenv
+
         s = cfg()
-        body = request.get_json(force=True) or {}
+        body = request.get_json() or {}
+        path = s.dotenv_path or Path.cwd() / ".env"
+        in_file = parse_dotenv(path)
         values = {}
         for key, value in (body.get("values") or {}).items():
             field = ALL_FIELDS.get(key)
@@ -354,8 +368,9 @@ def create_app(settings: Settings):
                 continue  # unchanged masked secret
             if "\n" in value:
                 raise VautoError(f"{key} cannot contain a line break")
+            if value == in_file.get(key, "") or (not value and key not in in_file):
+                continue  # nothing to change
             values[key] = value
-        path = s.dotenv_path or Path.cwd() / ".env"
         changed = update_env(path, values)
         try:
             state["settings"] = Settings.from_env(dotenv=path) if s.dotenv_path else Settings.from_env()

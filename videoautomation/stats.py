@@ -125,7 +125,7 @@ def mastodon_metrics(settings: Settings, status_id: str, session: requests.Sessi
 
 def zernio_metrics(settings: Settings, zernio_post_id: str, platform: str,
                    session: requests.Session) -> dict[str, float]:
-    """Per-post numbers from Zernio's analytics (needs Zernio's analytics add-on)."""
+    """Per-post numbers from Zernio's analytics (included with every Zernio account since 2026)."""
     from .publishers.zernio import ZernioPublisher
 
     pub = ZernioPublisher(settings, session=session)

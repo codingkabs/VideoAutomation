@@ -690,7 +690,7 @@ async function loadStats() {
   const note = $("#stats-note");
   note.hidden = s.has_numbers;
   note.replaceChildren(s.posts
-    ? el("span", {}, el("b", {}, "No view counts yet. "), "vauto reads numbers from Instagram and Facebook (direct), Threads, Bluesky, Mastodon and anything posted through Zernio (with its analytics add-on). Press ",
+    ? el("span", {}, el("b", {}, "No view counts yet. "), "vauto reads numbers from Instagram and Facebook (direct), Threads, Bluesky, Mastodon and anything posted through Zernio. Press ",
       el("b", {}, "Update numbers"), ", or type them in on My posts for phone hand-offs.")
     : el("span", {}, "Post something and your numbers will build up here."));
   renderPlatformBars(s);

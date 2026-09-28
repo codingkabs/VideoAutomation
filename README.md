@@ -306,7 +306,7 @@ vauto records every real post (previews are not recorded): the caption, a thumbn
 **Where the numbers come from.** vauto reads views, likes, comments and shares from:
 - Instagram and Facebook (direct, or Instagram posts made through Zernio when `IG_ACCESS_TOKEN` is set)
 - Threads, Bluesky and Mastodon
-- anything posted through Zernio, if your Zernio plan includes its analytics add-on
+- anything posted through Zernio (analytics are included with every Zernio account)
 
 Phone hand-offs, browser uploads, Telegram and TikTok drafts can't report numbers. For those, tap **Mark as posted** and **Enter numbers** on My posts, or skip them.
 
@@ -405,7 +405,7 @@ Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial
 | Bot says file too big | Telegram bots download 20 MB max; share to the vauto app, or turn on the big-files server |
 | iPhone video looks grey or washed out | It was HDR. vauto converts HDR to standard colour when ffmpeg has the `zscale` filter (Homebrew, Ubuntu and the Docker image do). Otherwise export SDR from your editing app |
 | Photo comes out sideways | Update vauto; phone photos with a rotation flag are now handled |
-| Stats show no views | Numbers need Instagram/Facebook tokens, Zernio's analytics add-on, or Threads/Bluesky/Mastodon; others: type them in on My posts |
+| Stats show no views | Numbers come from Zernio, Instagram/Facebook direct, Threads, Bluesky or Mastodon; press Update numbers (they can take a few hours to appear). Phone hand-offs: type them in on My posts |
 | Numbers never update | The worker must be running (Docker runs it); or press Update numbers |
 | Phone won't install the app or show "vauto" in Share | It needs an https address: use `tailscale serve` (see [Use it from your phone](#use-it-from-your-phone)); on iPhone use the Shortcut |
 

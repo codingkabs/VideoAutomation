@@ -214,7 +214,7 @@ class ZernioPublisher(Publisher):
 
     def best_times(self, platform: str) -> list[tuple[int, int]]:
         """(weekday 0=Mon, hour) pairs Zernio recommends, best first. Needs ZERNIO_PROFILE_ID
-        and the analytics add-on; returns [] when unavailable."""
+        and a few posts of history; returns [] when unavailable."""
         if not self.settings.zernio_profile_id:
             return []
         try:

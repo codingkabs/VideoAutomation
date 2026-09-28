@@ -2,7 +2,7 @@
 
 Metrics come from Instagram's own insights API when an Instagram token is set
 (direct Meta or not), because that works for posts made through Zernio too.
-Without it, vauto asks Zernio's analytics (needs Zernio's analytics add-on).
+Without it, vauto asks Zernio's analytics (included with every Zernio account).
 """
 
 from __future__ import annotations

@@ -186,7 +186,7 @@ Zernio also hosts uploaded media, so no other storage is needed.
 
 ### 2. Instagram and Facebook
 
-**Easiest:** connect them in Zernio too, and set `VAUTO_BACKEND_INSTAGRAM=zernio`, `VAUTO_BACKEND_FACEBOOK=zernio` and their `ZERNIO_ACCOUNT_...` ids.
+**Easiest:** connect them in Zernio too and add their `ZERNIO_ACCOUNT_...` ids. vauto uses Zernio for them automatically until you set up the direct route below.
 
 **Free, direct Meta API (default):**
 

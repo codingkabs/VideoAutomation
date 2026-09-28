@@ -46,8 +46,14 @@ function toast(message) {
 
 function when(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  // Times are shown in your vauto time zone (VAUTO_TIMEZONE), the one schedules use.
+  const opts = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
+  const tz = state.status && state.status.defaults.timezone;
+  if (tz) {
+    opts.timeZone = tz;
+    if (tz !== Intl.DateTimeFormat().resolvedOptions().timeZone) opts.timeZoneName = "short";
+  }
+  try { return new Date(iso).toLocaleString(undefined, opts); } catch { return new Date(iso).toLocaleString(); }
 }
 
 const STATUS = {
@@ -442,6 +448,7 @@ function thumbEl(url, kind, cls = "pthumb") {
 const tip = $("#viz-tip");
 function attachTip(node, lines) {
   node.tabIndex = 0;
+  if (!node.getAttribute("role")) node.setAttribute("role", "img");  // a named, focusable chart mark
   node.setAttribute("aria-label", lines.join(", "));
   const show = (x, y) => {
     tip.replaceChildren(el("strong", {}, lines[0]), ...lines.slice(1).map((l) => el("div", {}, l)));
@@ -729,7 +736,7 @@ function renderTopPosts(s) {
       el("span", { class: "trank" }, `${i + 1}`), thumbEl(p.thumb, p.kind, "tthumb"),
       el("div", { class: "tmain" }, el("div", { class: "pcaption" }, p.caption),
         el("div", { class: "muted small" }, numbersLine(p.totals))),
-      link ? el("a", { href: link, target: "_blank", rel: "noopener", class: "small" }, "Open ↗") : null);
+      link ? el("a", { href: link, target: "_blank", rel: "noopener", class: "small tap" }, "Open ↗") : null);
   }));
 }
 
@@ -959,6 +966,7 @@ function renderPlatformTable() {
 function platformItem(p) {
   const g = p.guide || {};
   const readyBadge = p.status === "planned" ? el("span", { class: "badge" }, "Planned")
+    : p.backend === "handoff" && p.ready ? el("span", { class: "badge info" }, "Via your phone")
     : el("span", { class: `badge ${p.ready ? "ok" : "warn"}` }, p.ready ? "Ready" : "Needs setup");
   const details = el("details", { class: "plat", open: platState.open.has(p.key),
     ontoggle: (e) => { e.target.open ? platState.open.add(p.key) : platState.open.delete(p.key); } },

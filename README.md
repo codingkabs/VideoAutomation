@@ -4,9 +4,12 @@ Give `vauto` one video (or a set of photos) and a caption. It formats the media 
 
 - **Instagram Trial Reels.** A zoomed-in version of your video goes out 1–2 hours later to non-followers, and vauto tells you 72 hours later which version won.
 - **Made for phone editors:** finish your edit in CapCut or your gallery, tap **Share → vauto**, write the caption, post. It also works as a web app on your computer, a Telegram bot, or the command line (which Claude Code can drive for you).
-- **Subtitles, scheduling, best posting times, TikTok drafts for trending sounds, and per-platform captions** are built in.
+- **My posts and Stats.** Every post is tracked with its links and its views, likes, comments and shares from each platform. You also see your best posting hours, the hashtags that work for you, and a posting calendar.
+- **Subtitles, scheduling, best posting times, TikTok drafts for trending sounds, saved captions and per-platform captions** are built in.
 
-The research behind it, covering about 50 platforms, is in [docs/platform-research.md](docs/platform-research.md).
+The research behind it covers about 50 platforms:
+- [docs/platform-guide.md](docs/platform-guide.md): how each platform works for creators (ranking, length, UK posting times, earning).
+- [docs/platform-research.md](docs/platform-research.md): how each platform can be posted to automatically.
 
 ---
 
@@ -18,12 +21,13 @@ The research behind it, covering about 50 platforms, is in [docs/platform-resear
 4. [Run it 24/7 with Docker](#run-it-247-with-docker)
 5. [Setup, step by step](#setup-step-by-step)
 6. [Using it](#using-it)
-7. [Trial Reels](#trial-reels)
-8. [Scheduling and best times](#scheduling-and-best-times)
-9. [Subtitles and music](#subtitles-and-music)
-10. [Phone-only apps, web uploaders and China](#phone-only-apps-web-uploaders-and-china)
-11. [Keeping it running](#keeping-it-running)
-12. [Troubleshooting](#troubleshooting)
+7. [My posts and Stats](#my-posts-and-stats)
+8. [Trial Reels](#trial-reels)
+9. [Scheduling and best times](#scheduling-and-best-times)
+10. [Subtitles and music](#subtitles-and-music)
+11. [Phone-only apps, web uploaders and China](#phone-only-apps-web-uploaders-and-china)
+12. [Keeping it running](#keeping-it-running)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -213,11 +217,13 @@ Instagram photo posts on the direct Meta route, and Threads direct, need media a
 vauto web          # opens on http://127.0.0.1:8765
 ```
 
-- **Post:** drop a video or photos, write the caption (live length and hashtag checks per platform), pick platforms, tick options, **Preview** to see every version with its caption and media, then **Post**.
-- **Queue:** everything posted, scheduled or waiting; cancel or retry.
-- **Trial results:** main Reel vs trial, side by side.
+- **Post:** drop a video or photos and write the caption. You get live length and hashtag checks per platform, and saved captions and hashtag sets you can add with one tap. Pick platforms and options, **Preview** to see every version with its caption and media, then **Post**.
+- **My posts:** everything you posted, scheduled or still need to finish on your phone, with links and numbers per platform. You can search, retry, cancel, mark phone posts as done, **Post again** to more places, or export a CSV.
+- **Stats:** views, likes, comments and shares, views by platform, top posts, your best posting hours, a posting calendar, the hashtags that work for you, and Trial Reel results.
 - **Setup:** what's ready, and every setting.
-- **Platforms:** all 50, their route and limits.
+- **Platforms:** all 50. Tap one to see how it works, what length and posting times suit it, how creators earn there, and what vauto needs.
+
+On a phone the tabs sit at the bottom of the screen, and the back gesture moves between them.
 
 To use it from your phone, see [Use it from your phone](#use-it-from-your-phone). Quick version on the same Wi-Fi: set `VAUTO_WEB_PASSWORD`, then `vauto web --host 0.0.0.0`.
 
@@ -246,7 +252,12 @@ vauto post clip.mp4 -c "..." --rewrite-captions                                 
 |---|---|
 | `vauto doctor [--online]` | What's set up, what's missing, how to fix it |
 | `vauto platforms [--ready]` | Every platform with its route and status |
-| `vauto jobs [--cancel ID] [--retry ID]` | Recent posts and the queue |
+| `vauto platforms tiktok` | How one platform works, when to post, and what vauto needs |
+| `vauto posts [ID] [--search text] [--show attention]` | Your post history with links and numbers |
+| `vauto posts --mark-posted JOB --url LINK` | Record a phone hand-off you posted yourself |
+| `vauto stats [--days 30] [--refresh]` | Views, likes, best platform, best hours and hashtags |
+| `vauto export posts.csv` | Everything as a spreadsheet |
+| `vauto jobs [--cancel ID] [--retry ID]` | Recent jobs and the queue |
 | `vauto trials` | Trial Reel results |
 | `vauto worker [--once]` | Posts queued jobs when due |
 | `vauto best-time` | The next best posting slot |
@@ -259,6 +270,27 @@ vauto post clip.mp4 -c "..." --rewrite-captions                                 
 ### With Claude Code
 
 Drop a video into a Claude Code session in this repository and say *"post this everywhere with the caption '…', and do a trial reel"*. Claude runs a preview first, shows you the plan, and posts after you say go.
+
+---
+
+## My posts and Stats
+
+vauto records every real post (previews are not recorded): the caption, a thumbnail, each platform's link and status, and anything that was skipped and why.
+
+**Where the numbers come from.** vauto reads views, likes, comments and shares from:
+- Instagram and Facebook (direct, or Instagram posts made through Zernio when `IG_ACCESS_TOKEN` is set)
+- Threads, Bluesky and Mastodon
+- anything posted through Zernio, if your Zernio plan includes its analytics add-on
+
+Phone hand-offs, browser uploads, Telegram and TikTok drafts can't report numbers. For those, tap **Mark as posted** and **Enter numbers** on My posts, or skip them.
+
+**When they update.** The worker fetches fresh numbers every 6 hours for posts from the last 30 days (`VAUTO_STATS_REFRESH_HOURS`; 0 turns it off). You can also press **Update numbers** or run `vauto stats --refresh`. Posts that Zernio scheduled are checked too: once they are live, their link is saved.
+
+**Weekly summary.** With Telegram notifications set up, the worker sends a summary every Monday at 9am: posts, views, your top platform and best post. Set `VAUTO_DIGEST=daily` or `off` to change it. In the bot, `/posts` and `/stats` answer any time.
+
+**Daily limits.** vauto counts your recent posts and warns in the preview when you are close to a platform's cap (Instagram 100, Facebook Reels 30, TikTok about 15, Threads 250 a day).
+
+**Your best times.** Once 3 or more posts have numbers, Stats shows which hours and hashtags do best for *you*. Trust that over any general advice, including [the guide](docs/platform-guide.md).
 
 ---
 
@@ -343,6 +375,8 @@ Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial
 | Instagram "limit reached" | 100 API posts per 24 h; wait |
 | Browser platform handed off to phone | The site changed; see the screenshot in `~/.vauto/browser/debug/` |
 | Bot says file too big | Telegram bots download 20 MB max; share to the vauto app, or turn on the big-files server |
+| Stats show no views | Numbers need Instagram/Facebook tokens, Zernio's analytics add-on, or Threads/Bluesky/Mastodon; others: type them in on My posts |
+| Numbers never update | The worker must be running (Docker runs it); or press Update numbers |
 | Phone won't install the app or show "vauto" in Share | It needs an https address: use `tailscale serve` (see [Use it from your phone](#use-it-from-your-phone)); on iPhone use the Shortcut |
 
 ## Development
@@ -354,4 +388,6 @@ pytest
 
 The tests render real media with ffmpeg, drive a fake upload site in Chromium, and use fake HTTP sessions for every platform API, so nothing is posted.
 
-Code map: `pipeline.py` (plan and run a post), `media/` (ffmpeg), `captions.py`, `publishers/` (one file per route), `scheduler.py` (queue), `insights.py` (Trial results), `timing.py` (scheduling), `bot.py`, `web/`, `doctor.py`, `config/platforms.yaml` (every platform's limits and routes).
+The web app is also tested in a real browser at phone size (tabs, My posts, Stats, Platforms, saved captions, and that every control has a name for screen readers).
+
+Code map: `pipeline.py` (plan and run a post), `media/` (ffmpeg), `captions.py`, `publishers/` (one file per route), `scheduler.py` (queue), `tracker.py` (My posts, Stats, saved captions, weekly summary), `stats.py` (numbers from each platform), `insights.py` (Trial results), `timing.py` (scheduling), `bot.py`, `web/`, `doctor.py`, `config/platforms.yaml` (every platform's limits and routes), `config/platform_guide.yaml` (how each platform works).

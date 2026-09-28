@@ -20,6 +20,8 @@ Flags worth knowing:
 - `--trim` cuts videos to each platform's maximum length instead of skipping that platform.
 - `--caption-for tiktok="..."` sets a per-platform caption. You can write these yourself when the user asks for tailored captions.
 
+After posting, or when the user asks how things are going: `vauto posts` (history with links and numbers), `vauto stats [--refresh]` (totals, best platform, best hours and hashtags), `vauto platforms NAME` (how a platform works and when to post there; docs/platform-guide.md has the full guide). Hand-offs the user finished on their phone: `vauto posts --mark-posted JOB --url LINK`.
+
 Never post without the user's go-ahead on the caption and platform list. A dry run is always safe.
 
 If the user asks about posting from their phone, point them to README "Use it from your phone" and `vauto phone` (installable web app with Share → vauto, an iPhone Shortcut, or the Telegram bot; `docker compose up -d` keeps it running 24/7).
@@ -29,6 +31,6 @@ This session's machine may block the platform APIs (network policy) and is tempo
 ## Development
 
 - Tests: `pytest` (needs ffmpeg; Chromium for the browser test; publishers use fake HTTP sessions).
-- Platform limits and routes live in `videoautomation/config/platforms.yaml`; update them there, not in code.
+- Platform limits and routes live in `videoautomation/config/platforms.yaml`; update them there, not in code. The creator guide per platform is `config/platform_guide.yaml` (a test checks every platform has one).
 - New platform: add it to the YAML (`status`, `backends`, `surfaces`, limits). A new route means a publisher in `videoautomation/publishers/`, registered in `BACKENDS` in `publishers/__init__.py`, plus a readiness rule in `doctor.platform_ready`.
 - Every setting is listed in `videoautomation/fields.py`; `.env.example` must contain each key (a test checks this).

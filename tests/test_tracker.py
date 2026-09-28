@@ -563,3 +563,11 @@ def test_bot_posts_and_stats(settings, monkeypatch):
     assert "Your last 7 days" in api.sent[-1]["text"]
     bot.handle_command(55, "/help")
     assert "/posts" in api.sent[-1]["text"]
+
+
+def test_web_blocks_cross_site_writes(web, settings):
+    _seed(settings)
+    evil = {"Origin": "https://evil.example"}
+    assert web.delete("/api/posts/postW", headers=evil).status_code == 403
+    assert web.post("/api/snippets", json={"name": "x", "text": "y"}, headers=evil).status_code == 403
+    assert web.get("/api/posts").get_json()["total"] == 1

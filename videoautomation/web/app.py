@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import service
-from ..config import Settings, load_platforms, platform_spec
+from ..config import Settings, load_platforms, platform_guide, platform_spec
 from ..doctor import platform_ready, run_checks
 from ..envfile import update_env
 from ..errors import ConfigError, VautoError
@@ -145,6 +145,7 @@ def create_app(settings: Settings):
                 "detail": detail, "backends": spec.get("backends", []),
                 "caption": spec.get("caption") or {}, "video": spec.get("video") or {},
                 "photos": spec.get("photos"), "default": key in s.default_platforms,
+                "guide": platform_guide(key), "rate_limit": spec.get("rate_limit"),
             })
         return rows
 

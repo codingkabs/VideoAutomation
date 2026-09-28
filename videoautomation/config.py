@@ -13,6 +13,7 @@ import yaml
 from .errors import ConfigError
 
 PLATFORMS_FILE = Path(__file__).parent / "config" / "platforms.yaml"
+GUIDE_FILE = PLATFORMS_FILE.with_name("platform_guide.yaml")
 TIER1 = ("instagram", "facebook", "tiktok", "youtube", "snapchat")
 POSTABLE_STATUSES = ("implemented", "beta", "handoff")
 DEFAULT_BEST_TIMES = "mon-fri 07:30,12:30,18:00,20:30; sat-sun 10:00,19:30"
@@ -331,6 +332,17 @@ def load_platforms() -> dict[str, dict[str, Any]]:
     with PLATFORMS_FILE.open(encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
     return data["platforms"]
+
+
+@lru_cache(maxsize=1)
+def load_guide() -> dict[str, dict[str, Any]]:
+    """How each platform works, for creators (config/platform_guide.yaml)."""
+    with GUIDE_FILE.open(encoding="utf-8") as fh:
+        return yaml.safe_load(fh)["guide"]
+
+
+def platform_guide(name: str) -> dict[str, Any]:
+    return load_guide().get(name, {})
 
 
 def platform_spec(name: str) -> dict[str, Any]:

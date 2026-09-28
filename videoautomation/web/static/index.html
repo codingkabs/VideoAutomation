@@ -207,9 +207,17 @@
     <!-- ======================================================== PLATFORMS -->
     <section id="tab-platforms" class="tab">
       <div class="card">
-        <h2>All platforms</h2>
-        <p class="muted small">Official API routes post directly. Beta routes drive the website like a person. Hand-off sends the ready file and caption to your phone.</p>
-        <div id="platform-table" class="table-wrap"></div>
+        <div class="card-head"><h2>Platforms</h2><span id="plat-count" class="muted small"></span></div>
+        <p class="muted small">Tap one to see how it works, what length and times suit it, how creators earn there, and what vauto needs to post to it.</p>
+        <div class="filters">
+          <input type="search" id="plat-q" placeholder="Search, e.g. TikTok, India, Russia" aria-label="Search platforms">
+          <div class="seg" role="group" aria-label="Show">
+            <button type="button" data-plat="all" aria-pressed="true">All</button>
+            <button type="button" data-plat="ready" aria-pressed="false">Ready</button>
+            <button type="button" data-plat="setup" aria-pressed="false">Needs setup</button>
+          </div>
+        </div>
+        <div id="platform-list" class="plat-list"></div>
       </div>
     </section>
   </main>

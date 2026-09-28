@@ -130,7 +130,8 @@ def build_parser() -> argparse.ArgumentParser:
     trials = sub.add_parser("trials", help="compare Trial Reels with their main Reels")
     trials.add_argument("--limit", type=int, default=5)
 
-    plats = sub.add_parser("platforms", help="list every platform, its route and whether it is set up")
+    plats = sub.add_parser("platforms", help="list every platform, or show how one works: vauto platforms tiktok")
+    plats.add_argument("name", nargs="?", help="one platform, for its guide, limits and setup")
     plats.add_argument("--tier", type=int)
     plats.add_argument("--ready", action="store_true", help="only platforms that are set up")
 
@@ -420,7 +421,48 @@ def cmd_export(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _platform_detail(key: str, settings: Settings) -> int:
+    import textwrap
+
+    from .config import platform_guide
+
+    spec = platform_spec(key)
+    guide = platform_guide(key)
+    colour = use_colour()
+    wrap = lambda text, indent="  ": textwrap.fill(" ".join(str(text).split()), 88, initial_indent=indent,  # noqa: E731
+                                                   subsequent_indent=indent)
+    print(paint(spec["name"], "ok", colour) + f"  ({', '.join(spec.get('regions', []))})")
+    if guide.get("summary"):
+        print(wrap(guide["summary"]))
+    for label, field in (("How posts get seen", "how_it_works"), ("Length that works", "length"),
+                         ("When to post", "best_times"), ("Earning", "earn")):
+        if guide.get(field):
+            print(f"\n{label}\n{wrap(guide[field])}")
+    if guide.get("tips"):
+        print("\nTips")
+        for tip in guide["tips"]:
+            print(textwrap.fill(tip, 88, initial_indent="  - ", subsequent_indent="    "))
+    status = spec.get("status", "planned")
+    print("\nIn vauto")
+    if status == "planned":
+        print(f"  No posting route yet ({spec.get('route', 'researched only')}).")
+        return 0
+    ready, detail = platform_ready(settings, key)
+    video, caption = spec.get("video") or {}, spec.get("caption") or {}
+    print(f"  Route: {settings.backends.get(key)} ({status}); {'ready' if ready else 'needs setup'}: {detail}")
+    if video.get("max_s"):
+        print(f"  Video: {video.get('min_s', 0)}–{video['max_s']} s, up to {video.get('max_mb', '?')} MB")
+    if caption.get("max_chars"):
+        tags = f", {caption['max_hashtags']} hashtags max" if caption.get("max_hashtags") else ""
+        print(f"  Caption: {caption['max_chars']} characters{tags}")
+    if spec.get("rate_limit"):
+        print(f"  Limits: {spec['rate_limit']}")
+    return 0
+
+
 def cmd_platforms(args: argparse.Namespace, settings: Settings) -> int:
+    if args.name:
+        return _platform_detail(args.name.strip().lower(), settings)
     colour = use_colour()
     for key, spec in load_platforms().items():
         if args.tier and spec.get("tier") != args.tier:
@@ -436,6 +478,7 @@ def cmd_platforms(args: argparse.Namespace, settings: Settings) -> int:
             continue
         mark = paint("ready" if ready else "setup", "ok" if ready else "warn", colour)
         print(f"T{spec.get('tier')}  {key:<18} {mark:<8}  {settings.backends.get(key):<9} {detail}")
+    print("\nHow a platform works and what to post there: vauto platforms NAME (e.g. vauto platforms tiktok)")
     return 0
 
 

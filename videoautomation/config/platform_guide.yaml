@@ -1,0 +1,473 @@
+# How each platform works, for creators. Shown in the web app (Platforms tab)
+# and by `vauto platforms NAME`. Researched September 2026; audience figures are
+# company-reported or from Ofcom and move quickly. Sources: docs/platform-guide.md.
+#
+# Keys per platform:
+#   summary       what it is and who is there
+#   how_it_works  how a post finds viewers
+#   length        what length tends to work (not the upload limit)
+#   best_times    when to post (UK time unless it says otherwise)
+#   tips          short, practical
+#   earn          how creators get paid there
+
+guide:
+
+  # ================================================================ UK core
+  instagram:
+    summary: >-
+      The biggest photo and Reels app in the UK after YouTube and Facebook; UK adults spend about 20 minutes a day on it.
+      Reels reach people who don't follow you; photos and carousels mostly reach followers.
+    how_it_works: >-
+      A new Reel is shown to a small test group first, then to more people if they watch it through and share it.
+      Instagram has said the signals that matter most are watch time, sends by DM per view, and likes per view.
+      Original content is favoured: accounts that mostly repost other people's videos get left out of recommendations.
+    length: "7–15 s for reach; 30–60 s for tutorials and stories. Up to 3 min can be recommended; longer Reels only reach followers."
+    best_times: "Weekdays 07:00–09:00 and 18:00–21:00; Sunday evening"
+    tips:
+      - "Hook in the first 1–2 seconds: movement, a question or the result first."
+      - "Up to 5 hashtags (Instagram's limit since late 2025). vauto trims extras."
+      - "Make things people send to a friend; shares by DM count more than likes."
+      - "Trial Reels show a version to non-followers first. vauto posts a zoomed variant for you."
+      - "Avoid TikTok watermarks; Instagram treats them as reposts."
+    earn: "Gifts and subscriptions, bonuses by invitation, brand deals. Most UK creators earn from brand deals."
+
+  facebook:
+    summary: >-
+      Still the UK's biggest social network for adults over 30 (Facebook and Messenger reach 93% of UK adults, about 43 min a day).
+      vauto posts to a Facebook Page, not a personal profile.
+    how_it_works: >-
+      The feed is now mostly recommended posts from people you don't follow, led by Reels.
+      Meta boosts original videos filmed or edited by you and cuts reach for reposts and clips with other apps' watermarks.
+    length: "15–60 s Reels; 90 s is the API limit vauto uses"
+    best_times: "Weekdays 09:00–13:00 and 19:00–21:00"
+    tips:
+      - "Older audience than Instagram and TikTok; captions and on-screen text matter because many watch muted."
+      - "Post the same Reel you made for Instagram. vauto uploads a clean copy without watermarks."
+      - "Page Reels limit: 30 per day through the API."
+    earn: "Facebook Content Monetization (UK eligible): ads on Reels and videos, bonuses, Stars. Invitation-based; often around 10,000 Page followers."
+
+  tiktok:
+    summary: >-
+      The strongest app for getting new people to see you. It reaches about half of UK adults online, and 18–34s spend around 49 minutes a day on it.
+    how_it_works: >-
+      TikTok shows each video to a small group (often including some of your followers), then widens it if people watch to the end,
+      rewatch, share, save and comment. Completion rate is the biggest signal. Search matters too: people search TikTok like Google.
+    length: "15–30 s gets the most engagement; 1 min+ is needed for Creator Rewards payouts and can earn more views."
+    best_times: "18:00–20:00 daily; 06:00–10:00 also works. Saturday is weakest."
+    tips:
+      - "Say the topic out loud and in the caption. TikTok search reads both."
+      - "Trending sounds help, but no posting tool can add them. Use vauto's TikTok drafts option and add the sound in the app."
+      - "Photo carousels get their own feed. vauto adds music automatically for photo posts."
+      - "About 15 posts a day is the most any tool can post; vauto warns you as you get close."
+    earn: "Creator Rewards (UK eligible): 10k followers, 100k views in 30 days, videos over 1 minute. Also TikTok Shop affiliate, LIVE gifts, subscriptions."
+
+  youtube:
+    summary: >-
+      YouTube reaches 94% of UK adults (about 51 min a day). Shorts sit inside the same app, so a Short can lead viewers to your long videos.
+    how_it_works: >-
+      The Shorts feed is ranked mostly on how many people keep watching instead of swiping away, and how much of the Short they watch.
+      Since March 2025 every play counts as a view, but payouts use "engaged views", which need real watch time.
+    length: "20–60 s works best; Shorts can be up to 3 minutes."
+    best_times: "Wednesday–Friday 15:00–17:00, and evenings"
+    tips:
+      - "Loops help: make the last second flow back into the first."
+      - "The title matters for search. vauto uses your first line as the title and adds #Shorts."
+      - "Link a related long video from the Short in YouTube Studio."
+    earn: "YouTube Partner Programme: 45% of the Shorts ad pool, shared by engaged views (1,000 subscribers + 10M Shorts views in 90 days, or 4,000 watch hours)."
+
+  snapchat:
+    summary: >-
+      Huge with under-25s in the UK. Children aged 8–14 spend about 45 min a day on it. Spotlight is its TikTok-style feed.
+    how_it_works: >-
+      Spotlight ranks by how long people watch, how many watch to the end, and shares or favourites. Saved Stories on a Public Profile reach subscribers.
+    length: "15–30 s for reach; payouts need Spotlights over 1 minute. vauto's Zernio route is set to 60 s until that limit is confirmed."
+    best_times: "Evenings 19:00–22:00; after school hours for a young audience"
+    tips:
+      - "Short description (160 characters); hashtags in the description help topic pages."
+      - "No trending audio through the API; keep your original audio."
+      - "Posting often matters: payouts need about 25 posts a month."
+    earn: "Snapchat Monetization Programme: 50k followers, 25 posts a month, ads in Stories and in Spotlights over 1 minute."
+
+  # ========================================================= global, API
+  threads:
+    summary: "Meta's text-first app, linked to your Instagram. It passed 500 million monthly users in 2026 and has more daily mobile users than X."
+    how_it_works: >-
+      The For You feed mixes people you follow with recommended posts, ranked on replies, reposts and your connection to the author.
+      Short videos under a minute and conversation starters do best.
+    length: "Under 60 s for video; one clear line of text"
+    best_times: "Weekdays 07:00–09:00 and 12:00–14:00"
+    tips:
+      - "Ask a question in the caption. Replies drive reach."
+      - "500-character posts; hashtags are topic tags (one per post works best)."
+    earn: "No revenue share for most creators; bonuses by invitation."
+
+  x:
+    summary: "Fast-moving news and conversation. Strong for commentary, sport and gaming."
+    how_it_works: >-
+      X ranks posts with a Grok-based model and published the code in January 2026. Early engagement in the first 30–60 minutes matters most.
+      Replies (especially when you reply back), reposts and bookmarks count far more than likes. Each account only gets so many posts into a person's feed per day.
+    length: "Under 60 s; native upload, not links"
+    best_times: "Weekdays 08:00–10:00 and 12:00–13:00"
+    tips:
+      - "Reply to your replies in the first hour."
+      - "Posting through the API is paid (about $0.015 per post)."
+    earn: "Creator revenue sharing for Premium subscribers with enough verified impressions; subscriptions."
+
+  linkedin:
+    summary: "Professional network. Video is growing fast, and vertical video now has its own feed."
+    how_it_works: "Ranks on dwell time (how long people stay) and comments from your network. Vertical video gets a boost. Posting regularly lifts your baseline reach."
+    length: "30–90 s for discovery; 2–5 min for people who already follow you"
+    best_times: "Tuesday–Thursday 08:00–10:00"
+    tips:
+      - "Add subtitles; most people watch without sound at work."
+      - "Lead with the lesson or the result, not the backstory."
+    earn: "No payouts; used for clients, jobs and brand deals."
+
+  pinterest:
+    summary: "Search engine for ideas: recipes, style, home, travel. Pins keep getting views for months."
+    how_it_works: "People find Pins through search and related Pins. Keywords in the title and description decide where your video shows up. Saves are the main signal."
+    length: "6–15 s for the most engagement; up to 30 s for a how-to"
+    best_times: "Evenings 20:00–23:00 and weekends"
+    tips:
+      - "Make the point in the first 3 seconds with no sound needed."
+      - "Use a keyword-rich title; vauto uses your first line."
+      - "Set a destination link (PINTEREST_LINK) so viewers can click through."
+    earn: "No creator fund in the UK; traffic and affiliate links."
+
+  bluesky:
+    summary: "Open, decentralised X alternative with about 46 million registered users (2026)."
+    how_it_works: "No single algorithm: Following is chronological, Discover is algorithmic, and people subscribe to custom feeds built by others. Tags and custom feeds help you get found."
+    length: "Under 60 s; videos up to 3 min"
+    best_times: "Weekday mornings and evenings (UK and US overlap 13:00–17:00)"
+    tips:
+      - "Use a few relevant hashtags; many custom feeds are built on them."
+      - "Up to 4 photos per post."
+    earn: "No payouts."
+
+  telegram:
+    summary: "Your own broadcast channel. Every subscriber sees every post, with no algorithm."
+    how_it_works: "Posts go straight to subscribers in order. Growth comes from sharing the channel link and from other channels mentioning you."
+    length: "Any length; vauto sends files up to 50 MB (2 GB with the big-files server)"
+    best_times: "Whenever your subscribers are awake; evenings work"
+    tips:
+      - "Pin a welcome post; share your channel link in your other bios."
+    earn: "Paid posts, Telegram Stars, sponsored posts."
+
+  reddit:
+    summary: "Communities (subreddits) around every interest. Each subreddit has its own rules."
+    how_it_works: "Upvotes in the first hour decide whether a post rises. Moderators remove self-promotion that breaks the rules."
+    length: "Under 60 s, no watermarks"
+    best_times: "Weekday mornings US time (13:00–16:00 UK)"
+    tips:
+      - "Read the subreddit's rules before posting; set REDDIT_SUBREDDIT and a flair if it needs one."
+      - "Titles that describe the video honestly do best."
+    earn: "Reddit Contributor Programme (limited countries)."
+
+  mastodon:
+    summary: "Decentralised network of independent servers. Small, loyal audiences."
+    how_it_works: "No algorithm. Posts appear in followers' timelines and in hashtag feeds. Boosts are the main way things spread."
+    length: "Short; servers limit file sizes (often 40–100 MB)"
+    best_times: "Mornings and evenings"
+    tips:
+      - "Add alt text and hashtags in CamelCase; the community expects both."
+    earn: "No payouts."
+
+  discord:
+    summary: "Your community's own server. Posts go to a channel through a webhook."
+    how_it_works: "No feed. Members get notified in the channel you pick."
+    length: "Any; up to about 10 MB without Nitro"
+    best_times: "When your members are online"
+    tips:
+      - "Use it to tell your core fans a new video is out."
+    earn: "Server subscriptions."
+
+  tumblr:
+    summary: "Blog-style community, strong for fandoms and art."
+    how_it_works: "Reblogs spread posts through the network; tags decide which tag pages show them."
+    length: "Short loops and GIF-like clips"
+    best_times: "Evenings"
+    tips: ["Tag generously; tags are how Tumblr search works."]
+    earn: "Tips and Tumblr Blaze (paid promotion)."
+
+  vimeo:
+    summary: "Ad-free video hosting for portfolios and clients rather than discovery."
+    how_it_works: "Little discovery; people arrive through links and embeds."
+    length: "Any"
+    best_times: "Not time-sensitive"
+    tips: ["Use it as a clean, watermark-free archive of your edits."]
+    earn: "Vimeo On Demand (sell or rent videos)."
+
+  dailymotion:
+    summary: "French video platform with a large audience in France and Europe."
+    how_it_works: "Search, channels and a vertical 'For You' feed in the app."
+    length: "Under 60 s for the vertical feed"
+    best_times: "Evenings CET"
+    tips: ["Worth it if you make French-language content."]
+    earn: "Partner programme with ad revenue share."
+
+  rumble:
+    summary: "US-focused video platform popular for politics, news and commentary."
+    how_it_works: "Editor picks, trending pages and search."
+    length: "Any"
+    best_times: "US daytime (15:00–22:00 UK)"
+    tips: ["Upload API needs a token from Rumble; ask them for one."]
+    earn: "Ad revenue share and licensing."
+
+  vk:
+    summary: "Russia's biggest social network. VK Video became Russia's most-used video service in 2026 (about 42M daily users)."
+    how_it_works: "Clips (vertical feed) are recommended by watch time and engagement; VK also pushes creators leaving YouTube."
+    length: "15–60 s Clips"
+    best_times: "Evenings Moscow time (17:00–21:00 UK)"
+    tips: ["Needs a Russian-speaking audience; post in Russian."]
+    earn: "VK creator programmes and ads."
+
+  okru:
+    summary: "Odnoklassniki, a VK-owned network with an older Russian audience."
+    how_it_works: "Feed of friends and groups plus recommended 'Moments'."
+    length: "Short"
+    best_times: "Evenings Moscow time"
+    tips: ["Groups drive most reach."]
+    earn: "Limited."
+
+  peertube:
+    summary: "Open-source, self-hosted video network (the Fediverse's YouTube)."
+    how_it_works: "Each server shows its own videos and those of servers it follows; no central algorithm."
+    length: "Any"
+    best_times: "Not time-sensitive"
+    tips: ["Pick an instance whose community matches your topic."]
+    earn: "Donations only."
+
+  odysee:
+    summary: "Blockchain-based video site (LBRY)."
+    how_it_works: "Search, tags and following; tips signal popularity."
+    length: "Any"
+    best_times: "Not time-sensitive"
+    tips: ["Small but loyal audience."]
+    earn: "Crypto tips (LBC)."
+
+  google_business:
+    summary: "Your business listing on Google Search and Maps."
+    how_it_works: "Updates show on your profile when people search for you or nearby businesses."
+    length: "Images only through the API"
+    best_times: "Before busy periods for your business"
+    tips: ["Great for local businesses; post offers and news."]
+    earn: "Brings customers, not payouts."
+
+  # ============================================= web uploaders (beta)
+  rutube:
+    summary: "Russian state-backed YouTube alternative, about 85M monthly users (early 2026), with a Shorts feed."
+    how_it_works: "Shorts feed plus recommendations from watch history; growing as YouTube is slowed in Russia."
+    length: "Under 60 s for Shorts"
+    best_times: "Evenings Moscow time"
+    tips: ["Russian titles and descriptions."]
+    earn: "Ad revenue share and subscriptions."
+
+  likee:
+    summary: "TikTok-style app from Singapore's BIGO, popular in Russia, Southeast Asia and the Middle East."
+    how_it_works: "For You feed ranked by watch time; effects and challenges push videos."
+    length: "15–30 s"
+    best_times: "Local evenings"
+    tips: ["Effects and hashtag challenges drive reach."]
+    earn: "Live gifts (beans), creator programmes in some countries."
+
+  dzen:
+    summary: "Yandex-origin (now VK) content platform in Russia with articles, videos and 'Shorts'."
+    how_it_works: "Recommendation feed personalised by reading and watch history."
+    length: "Under 60 s for Shorts"
+    best_times: "Mornings and evenings Moscow time"
+    tips: ["Consistency matters; Dzen rewards regular posting."]
+    earn: "Ad revenue share for eligible channels."
+
+  naver_clip:
+    summary: "Naver's short-video feed in South Korea, inside the Naver app most Koreans use every day."
+    how_it_works: "Recommended in the Naver app and search results; Naver has paid creator programmes to seed it."
+    length: "15–60 s"
+    best_times: "Evenings KST (11:00–14:00 UK)"
+    tips: ["Korean captions and search keywords."]
+    earn: "Naver creator programmes."
+
+  # ================================================== phone hand-off
+  lemon8:
+    summary: "ByteDance's lifestyle app (Instagram meets Pinterest). In the US it now runs under the TikTok USDS joint venture; available in the UK."
+    how_it_works: "Photo carousels and short videos with strong covers and useful captions; discovery through topics and search."
+    length: "Photo carousels first; videos under 60 s"
+    best_times: "Evenings"
+    tips: ["Clean cover image with a text title; step-by-step captions."]
+    earn: "Brand deals and affiliate links; no creator fund."
+
+  kwai:
+    summary: "Kuaishou's international app, big in Brazil and Latin America."
+    how_it_works: "For You feed ranked by watch time, with a strong push for new creators."
+    length: "15–60 s"
+    best_times: "Evenings Brazil time (22:00–01:00 UK)"
+    tips: ["Portuguese or Spanish captions."]
+    earn: "Creator incentives and live gifts in some countries."
+
+  triller:
+    summary: "Music-video app, much smaller than it was; mostly US."
+    how_it_works: "Auto-edits clips to music; feed of trending videos."
+    length: "15–30 s"
+    best_times: "US evenings"
+    tips: ["Low priority unless you already have an audience there."]
+    earn: "Limited."
+
+  moj:
+    summary: "India's biggest home-grown short-video app (ShareChat group), about 160M users, mostly outside big cities."
+    how_it_works: "For You feed per language; regional-language content faces less competition."
+    length: "15–30 s"
+    best_times: "Evenings IST (13:30–17:30 UK)"
+    tips: ["Post in Hindi or a regional language."]
+    earn: "Creator programmes and gifting."
+
+  josh:
+    summary: "Dailyhunt's short-video app for India, about 150M users."
+    how_it_works: "Language-based feeds; trends and challenges."
+    length: "15–30 s"
+    best_times: "Evenings IST"
+    tips: ["Regional languages and local trends."]
+    earn: "Creator programmes."
+
+  chingari:
+    summary: "Indian short-video app with live rooms and a strong community focus (about 50M users)."
+    how_it_works: "For You feed plus live audio/video rooms."
+    length: "15–30 s"
+    best_times: "Evenings IST"
+    tips: ["Use live rooms to build a core audience."]
+    earn: "Gifts and token rewards."
+
+  sharechat:
+    summary: "Indian social network in 15+ languages, 350M+ users, mostly outside big cities."
+    how_it_works: "Language and topic feeds; WhatsApp sharing spreads posts."
+    length: "Short; photos and video"
+    best_times: "Mornings and evenings IST"
+    tips: ["Shareable greetings and local-language humour spread through WhatsApp."]
+    earn: "Creator programmes."
+
+  roposo:
+    summary: "Indian video and live-shopping app (Glance)."
+    how_it_works: "Feed plus live commerce."
+    length: "15–30 s"
+    best_times: "Evenings IST"
+    tips: ["Suits fashion, beauty and shopping content."]
+    earn: "Live commerce commissions."
+
+  snack_video:
+    summary: "Kwai's app in Pakistan and Indonesia."
+    how_it_works: "For You feed ranked by watch time."
+    length: "15–30 s"
+    best_times: "Local evenings"
+    tips: ["Urdu or Indonesian captions."]
+    earn: "Creator incentives in some countries."
+
+  line_voom:
+    summary: "Video feed inside LINE, the main messaging app in Japan, Thailand and Taiwan."
+    how_it_works: "Recommended to LINE users; followers get your posts."
+    length: "15–60 s"
+    best_times: "Evenings JST/ICT"
+    tips: ["Needs a local-language audience."]
+    earn: "LINE VOOM creator programmes (Japan, Thailand, Taiwan)."
+
+  yappy:
+    summary: "Gazprom-Media's Russian TikTok alternative."
+    how_it_works: "For You feed; smaller than VK Clips."
+    length: "15–30 s"
+    best_times: "Evenings Moscow time"
+    tips: ["Low priority unless you target Russian youth."]
+    earn: "Limited."
+
+  zalo:
+    summary: "Vietnam's main messaging app, with a video feed."
+    how_it_works: "Friends' feed and recommended videos."
+    length: "15–60 s"
+    best_times: "Evenings ICT"
+    tips: ["Vietnamese captions."]
+    earn: "Limited."
+
+  clapper:
+    summary: "US short-video app for adults, focused on conversation and live."
+    how_it_works: "Chronological and For You feeds; live 'Clapper Party' rooms."
+    length: "30–90 s"
+    best_times: "US evenings"
+    tips: ["Talk-to-camera content fits best."]
+    earn: "Tips and subscriptions."
+
+  fanbase:
+    summary: "US creator app with investor-owners, built around subscriptions."
+    how_it_works: "Feed of followed creators plus discovery."
+    length: "Short"
+    best_times: "US evenings"
+    tips: ["Suits exclusive content for paying fans."]
+    earn: "Subscriptions and tips."
+
+  whatsapp_channels:
+    summary: "One-way broadcast channels inside WhatsApp, the UK's most used messaging app (90% of adults)."
+    how_it_works: "Followers get updates in the Updates tab; no public feed algorithm."
+    length: "Short clips; photos"
+    best_times: "Evenings"
+    tips: ["Share the channel link in your bios and videos."]
+    earn: "Channel subscriptions in some countries."
+
+  facebook_groups:
+    summary: "Community groups on Facebook: local, hobby and fan groups."
+    how_it_works: "Members see posts in their feed; admins set posting rules."
+    length: "Short"
+    best_times: "Evenings"
+    tips: ["Read each group's rules; post as yourself, not as an ad."]
+    earn: "None directly."
+
+  # ============================================================== China
+  douyin:
+    summary: "China's TikTok, about 755M users, spending 2+ hours a day. Needs a Chinese phone number and ID."
+    how_it_works: "Tests each video with a small pool, then widens it; saves, rewatches and follows now weigh more than completion alone."
+    length: "15–60 s; longer for storytelling"
+    best_times: "12:00–13:00 and 18:00–22:00 China time (05:00 and 11:00–15:00 UK)"
+    tips: ["Simplified Chinese captions and trending topics (话题)."]
+    earn: "Creator fund, live gifts, e-commerce commissions."
+
+  kuaishou:
+    summary: "China's second short-video app (about 736M monthly users), strong in smaller cities, with a more down-to-earth style."
+    how_it_works: "Spreads views more evenly than Douyin, so new creators get a fairer start; followers matter more."
+    length: "15–60 s"
+    best_times: "Evenings China time"
+    tips: ["Real, everyday content beats polished ads."]
+    earn: "Live gifts and e-commerce."
+
+  xiaohongshu:
+    summary: "RedNote: lifestyle reviews and recommendations, mostly young women; used like a search engine for products and travel."
+    how_it_works: "Notes (photos or video) are found by search and topic; saves ('collections') are a key signal."
+    length: "Photo notes or 30–90 s videos"
+    best_times: "Evenings China time"
+    tips: ["Honest, detailed reviews with a strong cover image."]
+    earn: "Brand collaborations through the Pugongying platform."
+
+  wechat_channels:
+    summary: "Video feed inside WeChat, about 813M monthly users."
+    how_it_works: "Spreads through friends' likes ('recommended by friends') as well as the algorithm; watch-through and comments among contacts matter."
+    length: "30–90 s"
+    best_times: "Evenings China time"
+    tips: ["Your WeChat contacts are your first audience."]
+    earn: "Live commerce and ads."
+
+  bilibili:
+    summary: "Chinese video site for anime, gaming and knowledge content, with a young, loyal audience and on-screen comments (danmaku)."
+    how_it_works: "Recommendations plus 'triple likes' (like, coin, favourite) as the main signal."
+    length: "Longer videos (3–15 min) do better than very short ones"
+    best_times: "Evenings China time"
+    tips: ["Pick the right category (BILIBILI_TID)."]
+    earn: "Creator incentive programme, charging (tips), brand deals."
+
+  weibo:
+    summary: "China's X, big for celebrities, news and trending topics."
+    how_it_works: "Hot search lists and hashtags (#话题#) drive visibility."
+    length: "Under 60 s"
+    best_times: "Mornings and evenings China time"
+    tips: ["Join trending topics with #topic# hashtags (Weibo style)."]
+    earn: "Creator ad share and tips."
+
+  baijiahao:
+    summary: "Baidu's creator platform; posts show up in Baidu search and apps."
+    how_it_works: "Search-led: titles and keywords decide reach."
+    length: "1–3 min"
+    best_times: "Mornings China time"
+    tips: ["Write titles people would type into Baidu."]
+    earn: "Ad revenue share."

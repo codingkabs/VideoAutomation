@@ -927,23 +927,70 @@ $("#save-settings").addEventListener("click", async (e) => {
 });
 
 // ---------------------------------------------------------------- platforms
+const platState = { q: "", show: "all", open: new Set() };
+const ROUTE_KIND = { implemented: "Official API", beta: "Beta: drives the website", handoff: "Hand-off: you tap post on your phone", planned: "Researched, no route yet" };
+const TIER = { 1: "UK core", 2: "Global", 3: "Regional apps", 4: "China" };
+const REGION = { uk: "UK", global: "Global", us: "US", ru: "Russia", cis: "CIS", mena: "Middle East", in: "India", br: "Brazil",
+  latam: "Latin America", id: "Indonesia", pk: "Pakistan", sea: "Southeast Asia", jp: "Japan", th: "Thailand", tw: "Taiwan",
+  vn: "Vietnam", kr: "South Korea", cn: "China", fr: "France" };
+
 function renderPlatformTable() {
-  const box = $("#platform-table");
   if (!state.status) return;
-  const route = { implemented: "Official API", beta: "Beta automation", handoff: "Phone hand-off", planned: "Planned" };
-  const rows = state.status.platforms.map((p) => el("tr", {},
-    el("td", {}, `T${p.tier}`), el("td", {}, el("b", {}, p.name), el("div", { class: "muted small" }, (p.regions || []).join(", "))),
-    el("td", {}, route[p.status] || p.status),
-    el("td", {}, p.status === "planned" ? el("span", { class: "muted" }, p.detail) : [badge(p.ready ? "published" : "skipped"), " ", el("span", { class: "muted small" }, `${p.backend}: ${p.detail}`)]),
-    el("td", { class: "small" }, p.video && p.video.max_s ? `≤${p.video.max_s}s` : p.video && p.video.max_mb ? "any length" : "",
-      p.caption && p.caption.max_chars ? el("div", { class: "muted" }, `${p.caption.max_chars} chars`) : null)));
-  rows.forEach((r) => {
-    const cell = r.children[3];
-    const b = cell.querySelector(".badge");
-    if (b) b.textContent = b.classList.contains("ok") ? "Ready" : "Needs setup";
+  const q = platState.q.toLowerCase();
+  const items = state.status.platforms.filter((p) => {
+    const regions = (p.regions || []).map((r) => REGION[r] || r).join(" ");
+    const text = `${p.name} ${p.key} ${regions} ${TIER[p.tier] || ""}`.toLowerCase();
+    if (q && !text.includes(q)) return false;
+    if (platState.show === "ready") return p.ready && p.status !== "planned";
+    if (platState.show === "setup") return !p.ready && p.status !== "planned";
+    return true;
   });
-  box.replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, ["Tier", "Platform", "Route", "Status", "Limits"].map((h) => el("th", {}, h)))), el("tbody", {}, rows)));
+  $("#plat-count").textContent = `${items.length} of ${state.status.platforms.length}`;
+  const box = $("#platform-list");
+  box.replaceChildren();
+  let tier = null;
+  for (const p of items) {
+    if (p.tier !== tier) { tier = p.tier; box.append(el("h3", { class: "plat-tier" }, TIER[tier] || `Tier ${tier}`)); }
+    box.append(platformItem(p));
+  }
+  if (!items.length) box.append(el("div", { class: "empty" }, "No platforms match."));
 }
+
+function platformItem(p) {
+  const g = p.guide || {};
+  const readyBadge = p.status === "planned" ? el("span", { class: "badge" }, "Planned")
+    : el("span", { class: `badge ${p.ready ? "ok" : "warn"}` }, p.ready ? "Ready" : "Needs setup");
+  const details = el("details", { class: "plat", open: platState.open.has(p.key),
+    ontoggle: (e) => { e.target.open ? platState.open.add(p.key) : platState.open.delete(p.key); } },
+    el("summary", {},
+      el("div", { class: "plat-main" }, el("b", {}, p.name),
+        el("span", { class: "muted small" }, (p.regions || []).map((r) => REGION[r] || r).join(", "))),
+      readyBadge),
+    el("div", { class: "plat-body" },
+      g.summary ? el("p", {}, g.summary) : null,
+      g.how_it_works ? el("div", { class: "gsec" }, el("h4", {}, "How posts get seen"), el("p", {}, g.how_it_works)) : null,
+      el("div", { class: "gfacts" },
+        g.length ? el("div", {}, el("span", { class: "muted small" }, "Length that works"), el("div", {}, g.length)) : null,
+        g.best_times ? el("div", {}, el("span", { class: "muted small" }, "When to post"), el("div", {}, g.best_times)) : null,
+        g.earn ? el("div", {}, el("span", { class: "muted small" }, "Earning"), el("div", {}, g.earn)) : null),
+      (g.tips || []).length ? el("div", { class: "gsec" }, el("h4", {}, "Tips"), el("ul", {}, g.tips.map((t) => el("li", {}, t)))) : null,
+      el("div", { class: "gsec gvauto" }, el("h4", {}, "In vauto"),
+        el("ul", {},
+          el("li", {}, `${ROUTE_KIND[p.status] || p.status}${p.backend ? ` (${ROUTES[p.backend] || p.backend})` : ""}`),
+          p.status !== "planned" ? el("li", {}, p.ready ? "Ready to post." : `To set up: ${p.detail}`) : el("li", {}, p.detail),
+          p.video && p.video.max_s ? el("li", {}, `Video ${p.video.min_s || 0}–${p.video.max_s} s${p.video.max_mb ? `, up to ${p.video.max_mb} MB` : ""}`) : null,
+          p.caption && p.caption.max_chars ? el("li", {}, `Caption up to ${p.caption.max_chars} characters${p.caption.max_hashtags ? `, ${p.caption.max_hashtags} hashtags` : ""}`) : null,
+          p.rate_limit ? el("li", {}, `Limits: ${p.rate_limit}`) : null),
+        p.status !== "planned" && !p.ready ? el("button", { class: "link", onclick: () => showTab("setup") }, "Open Setup →") : null)));
+  return details;
+}
+
+$("#plat-q").addEventListener("input", (e) => { platState.q = e.target.value.trim(); renderPlatformTable(); });
+$$("#tab-platforms .seg button").forEach((b) => b.addEventListener("click", () => {
+  $$("#tab-platforms .seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  platState.show = b.dataset.plat;
+  renderPlatformTable();
+}));
 
 // ----------------------------------------------------- shared from the phone
 async function loadSharedUpload() {

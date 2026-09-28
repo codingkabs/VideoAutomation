@@ -1,5 +1,7 @@
 # Short-form platform research (September 2026)
 
+> How each platform works for creators (ranking, length, UK posting times, earning) is in [platform-guide.md](platform-guide.md).
+
 This document covers every short-form video platform worth posting to, UK first and then worldwide, and how each one can be automated. It is the research behind the `vauto` tool in this repository.
 
 Numbers change often. Every spec here was checked in September 2026, and each one marked *(verify)* came from a single secondary source. The tool keeps all limits in `videoautomation/config/platforms.yaml` so they can be updated without code changes.

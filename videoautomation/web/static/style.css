@@ -382,3 +382,22 @@ th:not(:first-child) { text-align: right; }
   .kpis .kpi:first-child { grid-column: 1 / -1; }
   .kpi-value { font-size: 1.45rem; }
 }
+
+/* ------------------------------------------------------- platform guide */
+.plat-list { display: grid; gap: .45rem; }
+.plat-tier { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: .9rem 0 .2rem; }
+details.plat { border: 1px solid var(--line); border-radius: 12px; margin: 0; background: var(--panel); }
+details.plat > summary { list-style: none; display: flex; justify-content: space-between; align-items: center; gap: .6rem;
+  padding: .65rem .8rem; min-height: 48px; color: var(--text); }
+details.plat > summary::-webkit-details-marker { display: none; }
+details.plat > summary::after { content: "▸"; color: var(--muted); transition: transform .15s; }
+details.plat[open] > summary::after { transform: rotate(90deg); }
+.plat-main { display: grid; min-width: 0; flex: 1; }
+.plat-body { padding: 0 .9rem .9rem; font-size: .9rem; display: grid; gap: .7rem; }
+.plat-body p { margin: 0; }
+.gsec h4 { margin: 0 0 .25rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.gsec ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .2rem; }
+.gfacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .6rem; background: var(--panel-2);
+  border-radius: 10px; padding: .6rem .7rem; }
+.gfacts > div { display: grid; gap: .1rem; }
+.gvauto { border-top: 1px solid var(--line); padding-top: .6rem; }

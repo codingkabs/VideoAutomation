@@ -538,6 +538,57 @@ def mark_digest_sent(settings: Settings, tracker: Tracker, now: datetime | None 
     tracker.set_meta("digest_sent", stamp)
 
 
+KEEP_IN_RENDERS = ("thumb.jpg", "subtitles.srt")  # tiny: the post list thumbnail and your edited subtitles
+
+
+def cleanup(settings: Settings, tracker: Tracker, days: int | None = None, now: datetime | None = None,
+            dry_run: bool = False) -> dict[str, int]:
+    """Delete rendered videos, uploads and hand-off files older than ``days``.
+
+    Files of posts still waiting in the local queue are kept, and so are each
+    post's thumbnail and subtitles, so My posts still looks right.
+    """
+    from datetime import timezone
+
+    days = settings.keep_files_days if days is None else days
+    freed = {"files": 0, "bytes": 0}
+    if days <= 0:
+        return freed
+    cutoff = (now or utcnow()) - timedelta(days=days)
+    queued = {r.job.post_id for r in tracker.store.rows(include_done=False, limit=5000)}
+
+    def old(path: Path) -> bool:
+        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) < cutoff
+
+    def remove(path: Path) -> None:
+        freed["files"] += 1
+        freed["bytes"] += path.stat().st_size
+        if not dry_run:
+            path.unlink()
+
+    renders = settings.renders_dir
+    if renders.is_dir():
+        for post_dir in (d for d in renders.iterdir() if d.is_dir() and d.name not in queued):
+            for f in post_dir.iterdir():
+                if f.is_file() and f.name not in KEEP_IN_RENDERS and old(f):
+                    remove(f)
+    # Whole folders: web/phone uploads, hand-offs, and videos the Telegram bot received.
+    for base, depth in ((settings.home / "uploads", 1), (settings.outbox_dir, 1), (settings.home / "inbox", 2)):
+        if not base.is_dir():
+            continue
+        folders = [base] if depth == 0 else list(base.glob("/".join(["*"] * depth)))
+        for folder in (f for f in folders if f.is_dir()):
+            files = [f for f in folder.rglob("*") if f.is_file()]
+            if files and all(old(f) for f in files) and folder.name not in queued:
+                for f in files:
+                    remove(f)
+                if not dry_run:
+                    for sub in sorted((d for d in folder.rglob("*") if d.is_dir()), reverse=True):
+                        sub.rmdir()
+                    folder.rmdir()
+    return freed
+
+
 def housekeeping(settings: Settings, tracker: Tracker, now: datetime | None = None, session=None) -> list[str]:
     """Run by the worker: refresh numbers every few hours and send the digest."""
     from . import notify
@@ -553,6 +604,12 @@ def housekeeping(settings: Settings, tracker: Tracker, now: datetime | None = No
             done.append("stats: " + refresh(settings, tracker, session=session, now=now).text())
         else:
             tracker.set_meta("stats_refreshed_at", iso(now))
+    last_clean = tracker.get_meta("cleaned_at")
+    if settings.keep_files_days > 0 and (last_clean is None or parse_iso(last_clean) <= now - timedelta(days=1)):
+        freed = cleanup(settings, tracker, now=now)
+        tracker.set_meta("cleaned_at", iso(now))
+        if freed["files"]:
+            done.append(f"cleaned up {freed['files']} old file(s), {freed['bytes'] / 1e6:.0f} MB")
     if notify.enabled(settings) and digest_due(settings, tracker, now):
         days = 1 if settings.digest == "daily" else 7
         if notify.send(settings, digest_text(settings, tracker, days=days, now=now), session):

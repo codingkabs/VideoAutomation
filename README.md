@@ -16,7 +16,7 @@ The research behind it covers about 50 platforms:
 ## Contents
 
 1. [What it posts where](#what-it-posts-where)
-2. [Use it from your phone](#use-it-from-your-phone)
+2. [Post your first video](#post-your-first-video) · [Use it from your phone](#use-it-from-your-phone)
 3. [Install](#install)
 4. [Run it 24/7 with Docker](#run-it-247-with-docker)
 5. [Setup, step by step](#setup-step-by-step)
@@ -51,6 +51,28 @@ For every post vauto:
 - never double-posts: the same media and caption is recognised on a re-run.
 
 Run `vauto platforms` to see every platform and whether it is set up.
+
+---
+
+## Post your first video
+
+The quickest path takes about 20 minutes on a Mac or Windows PC.
+
+1. **Accounts.** Sign up at zernio.com. Connect Instagram, your Facebook Page, TikTok, YouTube and Snapchat (a few taps each, like logging in), then create an API key.
+2. **Install.** Install [Python 3.10+](https://www.python.org/downloads/) and ffmpeg (`brew install ffmpeg` on Mac, `winget install ffmpeg` on Windows). Then:
+   ```bash
+   cd VideoAutomation
+   pip install -e ".[web]"
+   cp .env.example .env            # Windows: copy .env.example .env
+   ```
+3. **Connect.** Put your key in `.env` as `ZERNIO_API_KEY=...`. Run `vauto accounts` and paste the `ZERNIO_ACCOUNT_...` lines it prints into `.env`. `vauto doctor` should now show the five platforms as ready.
+4. **Test first.** Post to one platform, privately if you can:
+   ```bash
+   vauto post myvideo.mp4 -c "Test post #test" -p youtube --dry-run   # preview: nothing is posted
+   vauto post myvideo.mp4 -c "Test post #test" -p tiktok --tiktok-draft
+   ```
+   The TikTok one lands in your TikTok drafts, so nothing goes public. When that works, post everywhere with `vauto post myvideo.mp4 -c "your caption"` or from the web app (`vauto web`).
+5. **From your phone.** To share videos straight from your phone's editing app, see [Use it from your phone](#use-it-from-your-phone).
 
 ---
 
@@ -160,6 +182,8 @@ TikTok and YouTube keep API uploads private until an app passes their audit, and
 
 Zernio also hosts uploaded media, so no other storage is needed.
 
+**Quickest start:** connect Instagram and your Facebook Page in Zernio too. vauto then posts them through Zernio automatically, so you can skip step 2 below. That's about $18 a month for the UK five (2 free + 3 × $6). Step 2 is free but takes longer to set up. Once it's done, vauto switches Instagram and Facebook to the direct route by itself.
+
 ### 2. Instagram and Facebook
 
 **Easiest:** connect them in Zernio too, and set `VAUTO_BACKEND_INSTAGRAM=zernio`, `VAUTO_BACKEND_FACEBOOK=zernio` and their `ZERNIO_ACCOUNT_...` ids.
@@ -257,6 +281,7 @@ vauto post clip.mp4 -c "..." --rewrite-captions                                 
 | `vauto posts --mark-posted JOB --url LINK` | Record a phone hand-off you posted yourself |
 | `vauto stats [--days 30] [--refresh]` | Views, likes, best platform, best hours and hashtags |
 | `vauto export posts.csv` | Everything as a spreadsheet |
+| `vauto clean [--dry-run]` | Delete old rendered videos to free disk space |
 | `vauto jobs [--cancel ID] [--retry ID]` | Recent jobs and the queue |
 | `vauto trials` | Trial Reel results |
 | `vauto worker [--once]` | Posts queued jobs when due |
@@ -360,6 +385,8 @@ Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial
 
 `vauto doctor` warns when queued jobs are overdue because no worker ran.
 
+**Disk space.** Every post renders a few versions of your video. The worker deletes rendered videos, uploads and hand-off files after 14 days (`VAUTO_KEEP_FILES_DAYS`; 0 keeps everything). Thumbnails, edited subtitles and anything still queued are kept. Run `vauto clean --dry-run` to see what would go, or `vauto clean` to do it now.
+
 **Cloud sessions and networks.** The machine vauto runs on must be allowed to reach the platform APIs (graph.facebook.com, zernio.com, open.tiktokapis.com, api.telegram.org, bsky.social and so on). Some sandboxed environments block these; run vauto on your own computer, or allow those hosts.
 
 ---
@@ -375,6 +402,8 @@ Posts that wait for later on vauto's side (direct-Meta scheduled posts and Trial
 | Instagram "limit reached" | 100 API posts per 24 h; wait |
 | Browser platform handed off to phone | The site changed; see the screenshot in `~/.vauto/browser/debug/` |
 | Bot says file too big | Telegram bots download 20 MB max; share to the vauto app, or turn on the big-files server |
+| iPhone video looks grey or washed out | It was HDR. vauto converts HDR to standard colour when ffmpeg has the `zscale` filter (Homebrew, Ubuntu and the Docker image do). Otherwise export SDR from your editing app |
+| Photo comes out sideways | Update vauto; phone photos with a rotation flag are now handled |
 | Stats show no views | Numbers need Instagram/Facebook tokens, Zernio's analytics add-on, or Threads/Bluesky/Mastodon; others: type them in on My posts |
 | Numbers never update | The worker must be running (Docker runs it); or press Update numbers |
 | Phone won't install the app or show "vauto" in Share | It needs an https address: use `tailscale serve` (see [Use it from your phone](#use-it-from-your-phone)); on iPhone use the Shortcut |

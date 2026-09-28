@@ -42,6 +42,8 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
               "default 6; 0 turns it off. Needs `vauto worker` (Docker runs it for you)"),
         Field("VAUTO_DIGEST", "Summary message on Telegram", "weekly (Monday 9am), daily, or off",
               choices=("weekly", "daily", "off"), kind="select"),
+        Field("VAUTO_KEEP_FILES_DAYS", "Keep rendered videos for (days)",
+              "default 14; older renders, uploads and hand-off files are deleted (thumbnails stay). 0 keeps everything"),
     )),
     ("zernio", "Zernio (TikTok, YouTube, Snapchat and more)", (
         Field("ZERNIO_API_KEY", "API key", "zernio.com > Dashboard > API keys", secret=True),

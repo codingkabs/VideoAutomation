@@ -71,6 +71,16 @@ def is_image_path(path: str | Path) -> bool:
     return Path(path).suffix.lower() in IMAGE_EXTS
 
 
+@lru_cache(maxsize=1)
+def has_filter(name: str) -> bool:
+    """True when this ffmpeg build has the filter (e.g. zscale for HDR tone-mapping)."""
+    try:
+        out = subprocess.run([ffmpeg_bin(), "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    except (OSError, MediaError):
+        return False
+    return any(line.split()[1:2] == [name] for line in out.splitlines() if line.strip())
+
+
 def probe(path: str | Path) -> MediaInfo:
     path = Path(path)
     if not path.is_file():
@@ -79,6 +89,10 @@ def probe(path: str | Path) -> MediaInfo:
         ffprobe_bin(), "-v", "error", "-print_format", "json",
         "-show_streams", "-show_format", str(path),
     ]
+    if is_image_path(path):
+        # Phone photos are often stored sideways with an EXIF rotation, which ffprobe
+        # only reports on the decoded frame. ffmpeg itself rotates them when reading.
+        cmd[-1:-1] = ["-show_frames", "-read_intervals", "%+#1"]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise MediaError(f"Could not read {path.name}: {proc.stderr.strip()[-300:]}")
@@ -90,7 +104,11 @@ def probe(path: str | Path) -> MediaInfo:
         raise MediaError(f"{path.name} has no video or image stream")
 
     width, height = int(video.get("width", 0)), int(video.get("height", 0))
-    if _rotation(video) in (90, 270):
+    rotation = _rotation(video)
+    if not rotation:
+        frame = next((f for f in data.get("frames", []) if f.get("media_type", "video") == "video"), {})
+        rotation = _rotation(frame)
+    if rotation in (90, 270):
         width, height = height, width
 
     fmt = data.get("format", {})
@@ -108,4 +126,5 @@ def probe(path: str | Path) -> MediaInfo:
         acodec=audio.get("codec_name") if audio else None,
         size_bytes=int(fmt.get("size") or path.stat().st_size),
         is_image=image,
+        color_transfer=str(video.get("color_transfer") or ""),
     )

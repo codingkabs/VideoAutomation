@@ -79,6 +79,24 @@ def _ids(value: str | None) -> list[int]:
     return out
 
 
+# Settings each direct route needs; used to fall back to Zernio when they're missing.
+DIRECT_KEYS = {
+    ("meta", "instagram"): ("IG_USER_ID", "IG_ACCESS_TOKEN"),
+    ("meta", "facebook"): ("FB_PAGE_ID", "FB_PAGE_ACCESS_TOKEN"),
+    ("threads", None): ("THREADS_USER_ID", "THREADS_ACCESS_TOKEN"),
+    ("bluesky", None): ("BLUESKY_HANDLE", "BLUESKY_APP_PASSWORD"),
+    ("telegram", None): ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHANNEL_ID"),
+    ("mastodon", None): ("MASTODON_INSTANCE", "MASTODON_ACCESS_TOKEN"),
+}
+
+
+def _direct_ready(backend: str, platform: str, get) -> bool:
+    keys = DIRECT_KEYS.get((backend, platform)) or DIRECT_KEYS.get((backend, None))
+    if keys is None:
+        return True  # routes without settings here (hand-off, browser, TikTok drafts) are left alone
+    return all(get(k) for k in keys)
+
+
 # ------------------------------------------------------------------------ settings
 
 
@@ -177,6 +195,7 @@ class Settings:
     # My posts: numbers refresh and summaries
     stats_refresh_hours: int = 6
     digest: str = "weekly"  # weekly | daily | off
+    keep_files_days: int = 14  # delete rendered videos and uploads older than this (0 = keep)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None, dotenv: Path | None = None) -> "Settings":
@@ -195,7 +214,12 @@ class Settings:
         for name in postable_platforms():
             spec = platform_spec(name)
             key = name.upper()
-            choice = (g(f"VAUTO_BACKEND_{key}") or spec["default_backend"]).lower()
+            explicit = g(f"VAUTO_BACKEND_{key}")
+            choice = (explicit or spec["default_backend"]).lower()
+            if (not explicit and choice != "zernio" and "zernio" in spec["backends"] and g("ZERNIO_API_KEY")
+                    and g(f"ZERNIO_ACCOUNT_{key}") and not _direct_ready(choice, name, g)):
+                # Connected in Zernio but the direct route isn't set up: use Zernio.
+                choice = "zernio"
             if choice not in spec["backends"]:
                 raise ConfigError(
                     f"VAUTO_BACKEND_{key}={choice} is not supported; use one of {', '.join(spec['backends'])}"
@@ -214,6 +238,10 @@ class Settings:
             stats_hours = int(g("VAUTO_STATS_REFRESH_HOURS") or 6)
         except ValueError as exc:
             raise ConfigError("VAUTO_STATS_REFRESH_HOURS must be a whole number of hours (0 turns it off)") from exc
+        try:
+            keep_days = int(g("VAUTO_KEEP_FILES_DAYS") or 14)
+        except ValueError as exc:
+            raise ConfigError("VAUTO_KEEP_FILES_DAYS must be a whole number of days (0 keeps everything)") from exc
         style = (g("VAUTO_SUBTITLE_STYLE") or "bold").lower()
         if style not in ("bold", "clean"):
             raise ConfigError("VAUTO_SUBTITLE_STYLE must be bold or clean")
@@ -293,6 +321,7 @@ class Settings:
             web_password=opt("VAUTO_WEB_PASSWORD"),
             stats_refresh_hours=max(0, stats_hours),
             digest=digest,
+            keep_files_days=max(0, keep_days),
         )
 
     def trial_backend_for(self) -> str:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..errors import MediaError
-from ..ffmpeg import probe, run_ffmpeg
+from ..ffmpeg import has_filter, probe, run_ffmpeg
 from ..models import MediaInfo
 
 TARGET_W, TARGET_H = 1080, 1920
@@ -47,6 +47,13 @@ def fit_graph(in_label: str, out_label: str, mode: str, w: int, h: int, prefix: 
     raise MediaError(f"Unknown fit mode {mode!r}")
 
 
+# HDR (HLG/PQ, as iPhones record by default) to standard BT.709 video. Platforms show
+# 8-bit H.264 as SDR, so without this HDR clips come out grey and washed out.
+TONEMAP = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,"
+           "zscale=t=bt709:m=bt709:r=tv,format=yuv420p")
+SDR_TAGS = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
+
+
 def output_fps(src_fps: float) -> float | None:
     """Keep the source rate when platforms accept it (24-60), else force 30."""
     if 23.0 <= src_fps <= 60.0:
@@ -79,6 +86,7 @@ def encode(
     duration: float | None = None,
     video_bitrate_k: int | None = None,
     audio_filter: str | None = None,
+    extra_args: list[str] | None = None,
 ) -> Path:
     """Run one encode. ``video_graph`` reads ``[0:v]`` and writes ``[v]``.
 
@@ -100,7 +108,7 @@ def encode(
         graph = video_graph
         audio_map = "1:a:0"
     args += ["-filter_complex", graph, "-map", "[v]", "-map", audio_map]
-    args += video_codec_args(video_bitrate_k) + AUDIO_ARGS + CONTAINER_ARGS
+    args += video_codec_args(video_bitrate_k) + AUDIO_ARGS + CONTAINER_ARGS + (extra_args or [])
     if total:
         args += ["-t", f"{total:.3f}"]
     args.append(str(out))
@@ -115,8 +123,11 @@ def normalize_video(src: MediaInfo, out: Path, fit: str = "auto") -> tuple[Path,
     if src.duration <= 0:
         raise MediaError(f"{Path(src.path).name} has no measurable duration")
     mode = resolve_fit(fit, src.aspect, TARGET_W / TARGET_H)
-    graph = fit_graph("0:v", "vfit", mode, TARGET_W, TARGET_H)
+    source, prefix, extra = "0:v", "", None
+    if src.is_hdr and has_filter("zscale"):
+        prefix, source, extra = f"[0:v]{TONEMAP}[sdr];", "sdr", SDR_TAGS
+    graph = prefix + fit_graph(source, "vfit", mode, TARGET_W, TARGET_H)
     fps = output_fps(src.fps)
     graph += f";[vfit]{'fps=' + str(fps) if fps else 'null'}[v]"
-    encode(src, out, graph)
+    encode(src, out, graph, extra_args=extra)
     return out, probe(out)

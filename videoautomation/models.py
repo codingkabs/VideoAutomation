@@ -7,6 +7,7 @@ from typing import Any
 
 
 SECONDARY_SURFACES = ("story", "trial_reel", "trial_report")
+HDR_TRANSFERS = ("arib-std-b67", "smpte2084")
 
 
 def label_for(platform: str, surface: str) -> str:
@@ -27,6 +28,11 @@ class MediaInfo:
     acodec: str | None
     size_bytes: int
     is_image: bool
+    color_transfer: str = ""  # e.g. arib-std-b67 (HLG) or smpte2084 (PQ) for HDR phone video
+
+    @property
+    def is_hdr(self) -> bool:
+        return self.color_transfer in HDR_TRANSFERS
 
     @property
     def has_audio(self) -> bool:

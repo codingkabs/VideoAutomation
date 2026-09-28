@@ -20,7 +20,9 @@ Flags worth knowing:
 - `--trim` cuts videos to each platform's maximum length instead of skipping that platform.
 - `--caption-for tiktok="..."` sets a per-platform caption. You can write these yourself when the user asks for tailored captions.
 
-After posting, or when the user asks how things are going: `vauto posts` (history with links and numbers), `vauto stats [--refresh]` (totals, best platform, best hours and hashtags), `vauto platforms NAME` (how a platform works and when to post there; docs/platform-guide.md has the full guide). Hand-offs the user finished on their phone: `vauto posts --mark-posted JOB --url LINK`.
+After posting, or when the user asks how things are going: `vauto posts` (history with links and numbers), `vauto stats [--refresh]` (totals, best platform, best hours and hashtags), `vauto platforms NAME` (how a platform works and when to post there; docs/platform-guide.md has the full guide). Hand-offs the user finished on their phone: `vauto posts --mark-posted JOB --url LINK`. Free disk space: `vauto clean`.
+
+Instagram and Facebook fall back to Zernio automatically when their direct Meta settings are missing and a Zernio account is connected for them. The quickest setup is Zernio for all five UK platforms.
 
 Never post without the user's go-ahead on the caption and platform list. A dry run is always safe.
 

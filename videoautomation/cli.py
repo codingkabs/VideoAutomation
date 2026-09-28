@@ -124,6 +124,10 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--refresh", action="store_true", help="fetch fresh numbers from the platforms first")
     stats.add_argument("--json", action="store_true")
 
+    clean = sub.add_parser("clean", help="delete old rendered videos and uploads to free disk space")
+    clean.add_argument("--days", type=int, help="delete files older than this (default VAUTO_KEEP_FILES_DAYS, 14)")
+    clean.add_argument("--dry-run", action="store_true", help="only show what would be deleted")
+
     export = sub.add_parser("export", help="save your post history and numbers as a CSV spreadsheet")
     export.add_argument("output", type=Path, nargs="?", default=Path("vauto-posts.csv"))
 
@@ -410,6 +414,20 @@ def cmd_stats(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_clean(args: argparse.Namespace, settings: Settings) -> int:
+    from .tracker import Tracker, cleanup
+
+    days = settings.keep_files_days if args.days is None else args.days
+    if days <= 0:
+        print("Nothing to do: keeping files is set to forever (VAUTO_KEEP_FILES_DAYS=0). Use --days N.")
+        return 0
+    freed = cleanup(settings, Tracker.open(settings), days=days, dry_run=args.dry_run)
+    verb = "Would delete" if args.dry_run else "Deleted"
+    print(f"{verb} {freed['files']} file(s) older than {days} days, {freed['bytes'] / 1e6:.0f} MB. "
+          "Thumbnails, subtitles and anything still queued were kept.")
+    return 0
+
+
 def cmd_export(args: argparse.Namespace, settings: Settings) -> int:
     from .tracker import Tracker
 
@@ -530,8 +548,13 @@ def cmd_auth(args: argparse.Namespace, settings: Settings) -> int:
         if args.write:
             path = settings.dotenv_path or Path.cwd() / ".env"
             changed = update_env(path, values)
-            print(f"Saved {', '.join(changed) or 'nothing new'} to {path}. Page tokens do not expire.")
+            print(f"Saved {', '.join(changed) or 'nothing new'} to {path}.")
+        if info["exchanged"]:
+            print("These Page tokens do not expire.")
         else:
+            print("Warning: without META_APP_ID and META_APP_SECRET these tokens expire in about an hour. "
+                  "Add both (from your Meta app's Settings > Basic) and run this again for tokens that don't expire.")
+        if not args.write:
             print("Add these to .env (or rerun with --write):")
             for key, value in values.items():
                 print(f"{key}={value}")
@@ -678,7 +701,7 @@ def cmd_variant(args: argparse.Namespace, settings: Settings) -> int:
 
 COMMANDS = {
     "post": cmd_post, "worker": cmd_worker, "jobs": cmd_jobs, "trials": cmd_trials, "platforms": cmd_platforms,
-    "posts": cmd_posts, "stats": cmd_stats, "export": cmd_export,
+    "posts": cmd_posts, "stats": cmd_stats, "export": cmd_export, "clean": cmd_clean,
     "accounts": cmd_accounts, "doctor": cmd_doctor, "best-time": cmd_best_time, "auth": cmd_auth,
     "browser": cmd_browser, "bot": cmd_bot, "web": cmd_web, "phone": cmd_phone, "probe": cmd_probe, "variant": cmd_variant,
 }

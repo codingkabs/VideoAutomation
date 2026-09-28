@@ -84,7 +84,7 @@ def _hook_filters(opts: VariantOptions, work_dir: Path) -> list[str]:
         filters.append(
             "drawtext="
             f"fontfile='{_escape_filter_path(font)}':"
-            f"textfile='{_escape_filter_path(str(text_file))}':"
+            f"textfile='{_escape_filter_path(str(text_file))}':expansion=none:"
             f"fontsize={font_size}:fontcolor=white:borderw=6:bordercolor=black@0.85:"
             f"x=(w-text_w)/2:y={top + i * line_height}:"
             f"enable='lt(t,{opts.hook_seconds:g})'"

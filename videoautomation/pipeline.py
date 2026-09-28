@@ -255,6 +255,12 @@ def _subtitle_cues(req: PostRequest, settings: Settings, master: MediaInfo, work
 
 def _plan_video(req, settings, src: MediaInfo, work: Path, texts, plan, add_job, reject) -> None:
     master_path = work / f"master_{req.fit}.mp4"
+    if src.is_hdr:
+        from .ffmpeg import has_filter
+
+        plan.notes.append("HDR video converted to standard colour for every platform" if has_filter("zscale") else
+                          "HDR video: this ffmpeg has no zscale filter, so colours may look washed out; "
+                          "install a full ffmpeg build or export SDR from your editing app")
     if master_path.is_file():
         clean = probe(master_path)
     else:

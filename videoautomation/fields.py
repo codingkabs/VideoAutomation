@@ -38,6 +38,10 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("VAUTO_TRIAL_BACKEND", "Trial Reel route", "auto uses Zernio scheduling when available",
               choices=("auto", "meta", "zernio"), kind="select"),
         Field("VAUTO_TRIAL_REPORT_HOURS", "Trial results check after (hours)", "default 72"),
+        Field("VAUTO_STATS_REFRESH_HOURS", "Refresh views and likes every (hours)",
+              "default 6; 0 turns it off. Needs `vauto worker` (Docker runs it for you)"),
+        Field("VAUTO_DIGEST", "Summary message on Telegram", "weekly (Monday 9am), daily, or off",
+              choices=("weekly", "daily", "off"), kind="select"),
     )),
     ("zernio", "Zernio (TikTok, YouTube, Snapchat and more)", (
         Field("ZERNIO_API_KEY", "API key", "zernio.com > Dashboard > API keys", secret=True),

@@ -12,6 +12,8 @@ from .config import Settings, load_platforms, platform_spec
 from .doctor import platform_ready, run_checks
 from .envfile import update_env
 from .errors import ConfigError, VautoError
+from .models import label_for
+from .notify import ICONS
 from .ffmpeg import probe
 from .media.normalize import FIT_MODES, normalize_video
 from .media.variants import VariantOptions, render_variant
@@ -104,6 +106,26 @@ def build_parser() -> argparse.ArgumentParser:
     jobs.add_argument("--limit", type=int, default=30)
     jobs.add_argument("--cancel", metavar="ID", help="cancel a queued job (first characters of its id)")
     jobs.add_argument("--retry", metavar="ID", help="retry a failed job now")
+
+    posts = sub.add_parser("posts", help="your post history: where each video went and how it did")
+    posts.add_argument("post_id", nargs="?", help="show one post in detail (first characters of its id)")
+    posts.add_argument("-s", "--search", default="", help="only posts whose caption contains this")
+    posts.add_argument("--platform", default="", help="only posts on this platform")
+    posts.add_argument("--show", choices=["all", "upcoming", "posted", "attention", "failed"], default="all",
+                       help="attention = failed, or waiting for you to finish on your phone")
+    posts.add_argument("--limit", type=int, default=15)
+    posts.add_argument("--mark-posted", metavar="JOB_ID",
+                       help="you finished a hand-off/browser post yourself: record it as live")
+    posts.add_argument("--url", help="the post's link, with --mark-posted")
+    posts.add_argument("--json", action="store_true")
+
+    stats = sub.add_parser("stats", help="views, likes and what works best, across platforms")
+    stats.add_argument("--days", type=int, default=30, help="period to cover (0 = all time)")
+    stats.add_argument("--refresh", action="store_true", help="fetch fresh numbers from the platforms first")
+    stats.add_argument("--json", action="store_true")
+
+    export = sub.add_parser("export", help="save your post history and numbers as a CSV spreadsheet")
+    export.add_argument("output", type=Path, nargs="?", default=Path("vauto-posts.csv"))
 
     trials = sub.add_parser("trials", help="compare Trial Reels with their main Reels")
     trials.add_argument("--limit", type=int, default=5)
@@ -213,14 +235,25 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def cmd_worker(args: argparse.Namespace, settings: Settings) -> int:
+    from .tracker import Tracker, housekeeping
+
     store = JobStore(settings.db_path)
+    tracker = Tracker(store)
     publisher_for = service.publisher_factory(settings)
     colour = use_colour()
     failed = False
     if not args.once:
         print(f"vauto worker: checking every {args.interval:g}s (Ctrl+C to stop)")
+
+    def tick() -> None:
+        try:
+            for line in housekeeping(settings, tracker):
+                print(line, flush=True)
+        except Exception as exc:  # numbers and summaries must never stop posting
+            print(f"stats refresh problem: {exc}", flush=True)
+
     try:
-        for result in worker_loop(store, publisher_for, interval=args.interval, once=args.once):
+        for result in worker_loop(store, publisher_for, interval=args.interval, once=args.once, tick=tick):
             failed = failed or result.status == "failed"
             print(format_results([result], colour=colour, tz=zone(settings)), flush=True)
             if result.status not in ("queued", "reported"):  # reports message you themselves
@@ -269,6 +302,121 @@ def cmd_trials(args: argparse.Namespace, settings: Settings) -> int:
         for line in comparison.lines():
             print(f"  {line}")
         print()
+    return 0
+
+
+METRIC_ICONS = (("views", "👁"), ("likes", "♥"), ("comments", "💬"), ("shares", "↗"))
+
+
+def _numbers(metrics: dict[str, float]) -> str:
+    from .tracker import compact
+
+    return "  ".join(f"{icon} {compact(metrics[k])}" for k, icon in METRIC_ICONS if metrics.get(k))
+
+
+def cmd_posts(args: argparse.Namespace, settings: Settings) -> int:
+    from .tracker import Tracker, short
+
+    if not settings.db_path.is_file():
+        print("No posts yet. Post something with `vauto post` or the web app.")
+        return 0
+    tracker = Tracker.open(settings)
+    tz = zone(settings)
+    colour = use_colour()
+    if args.mark_posted:
+        result = tracker.mark_posted(args.mark_posted, args.url)
+        print(f"Marked {label_for(result.platform, result.surface)} as posted" + (f": {result.url}" if result.url else ""))
+        return 0
+    if args.post_id:
+        matches = [p for p in tracker.posts(settings, limit=100000)["posts"] if p["post_id"].startswith(args.post_id)]
+        if len(matches) != 1:
+            raise VautoError(f"No single post starting with {args.post_id!r}")
+        p = matches[0]
+        if args.json:
+            print(json.dumps(p, indent=2))
+            return 0
+        print(f"{p['post_id']}  {when(p['posted_at'], tz)}  {p['kind']}")
+        print(f"  {p['caption']}\n")
+        for j in p["jobs"]:
+            status = paint(f"{j['status'].replace('_past', ''):<10}", j["status"].replace("_past", ""), colour)
+            detail = j["url"] or j["error"] or (j["notes"][0] if j["notes"] else "")
+            print(f"  {j['id']}  {j['label']:<24} {status} {_numbers(j['metrics'])}  {detail}".rstrip())
+        for r in p["rejected"]:
+            print(f"  {'':10}  {r['label']:<24} {paint('NOT POSTED', 'failed', colour)} {r['error']}")
+        return 0
+    show = "attention" if args.show == "failed" else args.show
+    data = tracker.posts(settings, query=args.search, platform=args.platform, show=show, limit=args.limit)
+    if args.json:
+        print(json.dumps(data, indent=2))
+        return 0
+    if not data["posts"]:
+        print("No posts match." if (args.search or args.platform or show != "all") else "No posts yet.")
+        return 0
+    for p in data["posts"]:
+        marks = "  ".join(f"{ICONS.get(j['status'].replace('_past', ''), '•')} {j['label']}" for j in p["jobs"])
+        print(f"{p['post_id'][:8]}  {when(p['posted_at'], tz):<20} {short(p['caption'], 44):<45} {_numbers(p['totals'])}")
+        print(f"          {marks}" + (f"  (+{len(p['rejected'])} not posted)" if p["rejected"] else ""))
+    if data["total"] > len(data["posts"]):
+        print(f"\n{data['total'] - len(data['posts'])} more; use --limit or --search")
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace, settings: Settings) -> int:
+    from .stats import refresh
+    from .tracker import Tracker, compact, short
+
+    if not settings.db_path.is_file():
+        print("No posts yet.")
+        return 0
+    tracker = Tracker.open(settings)
+    if args.refresh:
+        print("Fetching numbers: " + refresh(settings, tracker).text())
+    s = tracker.summary(settings, days=args.days or None)
+    if args.json:
+        print(json.dumps(s, indent=2))
+        return 0
+    t = s["totals"]
+    period = f"last {args.days} days" if args.days else "all time"
+    print(f"{period}: {s['posts']} post(s), {s['live']} live across platforms"
+          + (f", {s['failed']} failed" if s["failed"] else ""))
+    if not s["has_numbers"]:
+        print("No view counts yet. Run `vauto stats --refresh` once Instagram insights or Zernio analytics is set up,"
+              " or type numbers in the web app (My posts).")
+    else:
+        print(f"👁 {compact(t['views'])} views   ♥ {compact(t['likes'])}   💬 {compact(t['comments'])}"
+              f"   ↗ {compact(t['shares'])}   🔖 {compact(t['saved'])}")
+        print("\nBy platform")
+        for r in s["platforms"]:
+            print(f"  {r['name']:<16} {r['posts']:>3} post(s)  {compact(r['views']):>7} views"
+                  f"  {compact(r['avg_views']):>6} avg  {compact(r['likes']):>6} likes")
+        if s["top"]:
+            print("\nTop posts")
+            for p in s["top"]:
+                print(f"  {p['post_id'][:8]}  {compact(p['totals']['views']):>7} views  {short(p['caption'], 50)}")
+        if s["by_hour"] and s["enough_data"]:
+            best = max(s["by_hour"], key=lambda h: h["avg_views"])
+            print(f"\nYour posts do best around {best['hour']:02d}:00 ({compact(best['avg_views'])} views on average)")
+        if s["hashtags"] and s["enough_data"]:
+            print("Best hashtags: " + ", ".join(f"{h['tag']} ({compact(h['avg_views'])})" for h in s["hashtags"][:5]))
+    if s["streak"] > 1:
+        print(f"\n🔥 {s['streak']}-day posting streak")
+    if s["upcoming"]:
+        print(f"\nComing up ({len(s['upcoming'])})")
+        for j in s["upcoming"][:8]:
+            print(f"  {when(j['run_at'], zone(settings)):<20} {j['label']:<22} {j['caption']}")
+    if s["refreshed_at"]:
+        print(f"\nNumbers last fetched {when(s['refreshed_at'], zone(settings))}")
+    return 0
+
+
+def cmd_export(args: argparse.Namespace, settings: Settings) -> int:
+    from .tracker import Tracker
+
+    if not settings.db_path.is_file():
+        print("No posts yet.")
+        return 0
+    args.output.write_text(Tracker.open(settings).export_csv(settings), encoding="utf-8")
+    print(f"Saved {args.output}")
     return 0
 
 
@@ -487,6 +635,7 @@ def cmd_variant(args: argparse.Namespace, settings: Settings) -> int:
 
 COMMANDS = {
     "post": cmd_post, "worker": cmd_worker, "jobs": cmd_jobs, "trials": cmd_trials, "platforms": cmd_platforms,
+    "posts": cmd_posts, "stats": cmd_stats, "export": cmd_export,
     "accounts": cmd_accounts, "doctor": cmd_doctor, "best-time": cmd_best_time, "auth": cmd_auth,
     "browser": cmd_browser, "bot": cmd_bot, "web": cmd_web, "phone": cmd_phone, "probe": cmd_probe, "variant": cmd_variant,
 }

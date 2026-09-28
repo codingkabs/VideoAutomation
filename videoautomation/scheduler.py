@@ -226,10 +226,14 @@ def worker_loop(
     publisher_for: PublisherFor,
     interval: float = 30.0,
     once: bool = False,
+    tick: Callable[[], None] | None = None,
 ) -> Iterator[PostResult]:
-    """Yield results as due jobs run. With ``once`` it drains what is due and stops."""
+    """Yield results as due jobs run. With ``once`` it drains what is due and stops.
+    ``tick`` runs after each round (numbers refresh, weekly summary)."""
     while True:
         yield from run_due(store, publisher_for)
+        if tick is not None:
+            tick()
         if once:
             return
         time.sleep(interval)

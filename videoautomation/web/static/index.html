@@ -16,12 +16,12 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="logo" aria-hidden="true">▶</span> vauto</div>
-    <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="post" aria-selected="true">Post</button>
-      <button role="tab" data-tab="queue">Queue</button>
-      <button role="tab" data-tab="trials">Trial results</button>
-      <button role="tab" data-tab="setup">Setup</button>
-      <button role="tab" data-tab="platforms">Platforms</button>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" data-tab="post" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8v8M8 12h8"/></svg><span>Post</span></button>
+      <button role="tab" data-tab="posts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg><span>My posts</span></button>
+      <button role="tab" data-tab="stats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg><span>Stats</span></button>
+      <button role="tab" data-tab="setup"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg><span>Setup</span></button>
+      <button role="tab" data-tab="platforms"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.4 3.6 8.5s-1.1 5.9-3.6 8.5c-2.5-2.6-3.6-5.4-3.6-8.5S9.5 6.1 12 3.5z"/></svg><span>Platforms</span></button>
     </nav>
     <div id="ready-pill" class="pill">…</div>
   </header>
@@ -29,9 +29,13 @@
   <main>
     <!-- ============================================================ POST -->
     <section id="tab-post" class="tab active">
+      <div id="first-run" class="card hint" hidden>
+        <b>Nothing is connected yet.</b> Add your accounts in <button class="link inline-link" data-goto="setup">Setup</button>.
+        Until then you can still add a video and press <b>Preview</b>: it shows exactly what each platform would get, and nothing is posted.
+      </div>
       <div class="grid">
         <div class="col">
-          <div class="card">
+          <div class="card card-media">
             <h2>1. Video or photos</h2>
             <label id="dropzone" class="dropzone" tabindex="0">
               <input id="file-input" type="file" accept="video/*,image/*" multiple hidden>
@@ -45,9 +49,17 @@
             <div id="upload-status" class="muted small"></div>
           </div>
 
-          <div class="card">
+          <div class="card card-caption">
             <h2>2. Caption</h2>
             <textarea id="caption" rows="6" placeholder="Write the caption once. vauto fits it to each platform: hashtag caps, lengths, titles."></textarea>
+            <div class="snippets">
+              <div id="snippet-chips" class="chips" aria-label="Saved captions and hashtags"></div>
+              <button class="link" id="snippet-toggle" aria-expanded="false">Save this caption…</button>
+            </div>
+            <div id="snippet-form" class="snippet-form" hidden>
+              <input type="text" id="snippet-name" maxlength="60" placeholder="Name, e.g. Gym hashtags" aria-label="Name for the saved text">
+              <button class="secondary" id="snippet-save">Save</button>
+            </div>
             <div id="caption-meter" class="meters"></div>
             <details id="overrides">
               <summary>Different caption on a platform</summary>
@@ -55,8 +67,8 @@
             </details>
             <label class="toggle"><input type="checkbox" id="opt-rewrite"> <span>Let Claude tailor the caption for each platform</span></label>
           </div>
-          <div class="card">
-            <h2>3. Options</h2>
+          <div class="card card-options">
+            <h2>Options <span class="muted small">(all optional)</span></h2>
             <div class="option-row">
               <label class="toggle"><input type="checkbox" id="opt-trial"> <span><b>Instagram Trial Reel</b> — zoomed version for non-followers, later</span></label>
             </div>
@@ -100,9 +112,9 @@
         </div>
 
         <div class="col">
-          <div class="card">
+          <div class="card card-where">
             <div class="card-head">
-              <h2>4. Where</h2>
+              <h2>3. Where</h2>
               <div class="quick">
                 <button class="link" data-pick="uk">UK core</button>
                 <button class="link" data-pick="ready">All ready</button>
@@ -123,20 +135,58 @@
       <div id="results" class="results" hidden></div>
     </section>
 
-    <!-- ============================================================ QUEUE -->
-    <section id="tab-queue" class="tab">
+    <!-- ========================================================= MY POSTS -->
+    <section id="tab-posts" class="tab">
+      <div id="upcoming-card" class="card" hidden>
+        <div class="card-head"><h2>Coming up</h2><span id="upcoming-count" class="muted small"></span></div>
+        <div id="upcoming-list" class="upcoming"></div>
+      </div>
       <div class="card">
-        <div class="card-head"><h2>Posts and queue</h2><button class="link" id="refresh-queue">Refresh</button></div>
-        <div id="queue-list" class="table-wrap"></div>
+        <div class="card-head">
+          <h2>My posts</h2>
+          <div class="quick">
+            <button class="link" id="posts-refresh">Update numbers</button>
+            <a class="link" href="/api/export.csv" download>Export CSV</a>
+          </div>
+        </div>
+        <div class="filters">
+          <input type="search" id="posts-q" placeholder="Search captions" aria-label="Search captions">
+          <div class="seg" role="group" aria-label="Show">
+            <button type="button" data-show="all" aria-pressed="true">All</button>
+            <button type="button" data-show="posted" aria-pressed="false">Posted</button>
+            <button type="button" data-show="upcoming" aria-pressed="false">Coming up</button>
+            <button type="button" data-show="attention" aria-pressed="false">Needs you</button>
+          </div>
+          <select id="posts-platform" aria-label="Platform"><option value="">All platforms</option></select>
+        </div>
+        <div id="posts-list" class="plist" aria-live="polite"></div>
+        <div class="more-row"><button id="posts-more" class="secondary" hidden>Show more</button></div>
       </div>
     </section>
 
-    <!-- =========================================================== TRIALS -->
-    <section id="tab-trials" class="tab">
-      <div class="card">
-        <div class="card-head"><h2>Trial Reel results</h2><button class="link" id="refresh-trials">Refresh</button></div>
-        <p class="muted small">Main Reel vs its zoomed trial version. Numbers come from Instagram insights.</p>
-        <div id="trials-list"></div>
+    <!-- ============================================================ STATS -->
+    <section id="tab-stats" class="tab">
+      <div class="filters stats-filters">
+        <div class="seg" role="group" aria-label="Period">
+          <button type="button" data-days="7" aria-pressed="false">7 days</button>
+          <button type="button" data-days="30" aria-pressed="true">30 days</button>
+          <button type="button" data-days="90" aria-pressed="false">90 days</button>
+          <button type="button" data-days="0" aria-pressed="false">All time</button>
+        </div>
+        <button class="secondary small-btn" id="stats-refresh">Update numbers</button>
+        <span id="stats-updated" class="muted small"></span>
+      </div>
+      <div id="stats-body">
+        <div id="kpis" class="kpis"></div>
+        <div id="stats-note" class="card hint" hidden></div>
+        <div class="stats-grid">
+          <div class="card"><h2>Views by platform</h2><div id="platform-bars"></div></div>
+          <div class="card"><h2>Top posts</h2><div id="top-posts"></div></div>
+          <div class="card"><h2>When your posts do best</h2><p class="muted small sub">Average views per post, by the hour it went out (your time zone).</p><div id="hour-chart"></div></div>
+          <div class="card"><h2>Posting calendar</h2><p class="muted small sub">Last 12 weeks. <span id="streak"></span></p><div id="calendar"></div></div>
+          <div class="card"><h2>Hashtags that work</h2><p class="muted small sub">Average views of posts that used each hashtag.</p><div id="hashtags"></div></div>
+          <div class="card"><h2>Trial Reels: main vs trial</h2><p class="muted small sub">Numbers from Instagram insights, about 72 hours after the trial.</p><div id="trials-list"></div></div>
+        </div>
       </div>
     </section>
 
@@ -164,7 +214,8 @@
     </section>
   </main>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="viz-tip" class="viz-tip" role="tooltip" hidden></div>
   <script src="/static/app.js"></script>
 </body>
 </html>

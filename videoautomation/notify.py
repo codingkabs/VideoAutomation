@@ -8,7 +8,8 @@ from .models import PostResult, label_for
 from .telegram_api import TelegramAPI
 
 ICONS = {"published": "✅", "scheduled": "🗓", "draft": "📝", "handoff": "📲", "failed": "❌",
-         "skipped": "⏭", "reported": "📊", "submitted": "⏳", "queued": "⏳"}
+         "skipped": "⏭", "reported": "📊", "submitted": "⏳", "queued": "⏳", "pending": "⏳",
+         "running": "⏳"}
 
 
 def enabled(settings: Settings) -> bool:

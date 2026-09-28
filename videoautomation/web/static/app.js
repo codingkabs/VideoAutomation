@@ -54,6 +54,7 @@ const STATUS = {
   published: ["Posted", "ok"], reported: ["Reported", "ok"], draft: ["In drafts", "info"], handoff: ["To phone", "info"],
   scheduled: ["Scheduled", "warn"], queued: ["Queued", "warn"], pending: ["Queued", "warn"], running: ["Running", "warn"],
   submitted: ["Submitted", "warn"], dry_run: ["Preview", "info"], duplicate: ["Already done", ""],
+  scheduled_past: ["Should be live", "ok"],
   skipped: ["Skipped", ""], failed: ["Failed", "bad"],
 };
 const badge = (status) => {
@@ -78,14 +79,20 @@ const state = {
 };
 
 // --------------------------------------------------------------------- tabs
-const loaders = { queue: loadQueue, trials: loadTrials, setup: loadSetup, platforms: renderPlatformTable };
+const loaders = { posts: loadPosts, stats: loadStats, setup: loadSetup, platforms: renderPlatformTable };
 $$(".tabs button").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
-function showTab(name) {
+$$("[data-goto]").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.goto)));
+function showTab(name, push = true) {
+  if (!$(`#tab-${name}`)) name = "post";
   $$(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
   $$(".tab").forEach((t) => t.classList.toggle("active", t.id === `tab-${name}`));
   if (loaders[name]) loaders[name]();
-  history.replaceState(null, "", `#${name}`);
+  if (location.hash !== `#${name}`) history[push ? "pushState" : "replaceState"](null, "", `#${name}`);
+  window.scrollTo(0, 0);
 }
+// Back/forward (and the phone's back gesture) move between tabs.
+window.addEventListener("popstate", () => showTab(location.hash.replace("#", "") || "post", false));
+window.addEventListener("hashchange", () => showTab(location.hash.replace("#", "") || "post", false));
 
 // ------------------------------------------------------------------- status
 async function loadStatus() {
@@ -94,6 +101,11 @@ async function loadStatus() {
   if (state.selected.size === 0) postable.filter((p) => p.default).forEach((p) => state.selected.add(p.key));
   const ready = postable.filter((p) => p.ready && p.backend !== "handoff").length;
   $("#ready-pill").textContent = `${ready} platform${ready === 1 ? "" : "s"} ready`;
+  $("#first-run").hidden = ready > 0;
+  const pick = $("#posts-platform");
+  if (pick.options.length <= 1) {
+    postable.forEach((p) => pick.append(el("option", { value: p.key }, p.name)));
+  }
   const d = state.status.defaults;
   $("#opt-trial").checked = d.trial;
   $("#trial-options").hidden = !d.trial;
@@ -369,7 +381,8 @@ function renderResults(result, action) {
   box.append(el("div", { class: "card" },
     el("div", { class: "summary" },
       el("h2", { style: "margin:0" }, action === "preview" ? "Preview (nothing posted yet)" : "Results"),
-      Object.entries(counts).map(([s, n]) => el("span", {}, badge(s), ` ${n}`))),
+      Object.entries(counts).map(([s, n]) => el("span", {}, badge(s), ` ${n}`)),
+      action === "post" ? el("button", { class: "link", onclick: () => showTab("posts") }, "See it in My posts →") : null),
     notes.length ? el("ul", { class: "notes" }, notes.map((n) => el("li", {}, n))) : null));
 
   const byLabel = Object.fromEntries(result.jobs.map((j) => [j.label, j]));
@@ -403,47 +416,398 @@ function renderResults(result, action) {
   box.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// -------------------------------------------------------------------- queue
-async function loadQueue() {
-  const box = $("#queue-list");
-  box.replaceChildren(el("div", { class: "empty" }, "Loading…"));
-  const rows = await api("/api/jobs");
-  if (!rows.length) { box.replaceChildren(el("div", { class: "empty" }, "Nothing posted yet.")); return; }
-  const body = rows.map((r) => el("tr", {},
-    el("td", {}, when(r.run_at)),
-    el("td", {}, r.name, r.surface.includes("trial") || r.surface === "story" ? el("div", { class: "muted small" }, r.surface.replaceAll("_", " ")) : null),
-    el("td", {}, badge(r.status)),
-    el("td", {}, r.url ? el("a", { href: r.url, target: "_blank", rel: "noopener" }, "Open ↗") : (r.error || (r.notes || [])[0] || "")),
-    el("td", {},
-      r.status === "pending" ? el("button", { class: "link", onclick: () => jobAction(r.id, "cancel") }, "Cancel") : null,
-      ["failed", "skipped", "pending"].includes(r.status) && r.surface !== "trial_report" ? el("button", { class: "link", onclick: () => jobAction(r.id, "retry") }, r.status === "pending" ? "Post now" : "Retry") : null)));
-  box.replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, ["When", "Platform", "Status", "Link / details", ""].map((h) => el("th", {}, h)))), el("tbody", {}, body)));
+// ----------------------------------------------------------------- numbers
+const fmt = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+const num = (n) => fmt.format(Math.round(n || 0));
+const NUMS = [["views", "views"], ["likes", "likes"], ["comments", "comments"], ["shares", "shares"], ["saved", "saves"]];
+function numbersLine(m) {
+  const parts = NUMS.filter(([k]) => m && m[k]).map(([k, word]) => `${num(m[k])} ${word}`);
+  return parts.join(" · ");
 }
+function ago(iso) {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} days ago`;
+}
+function thumbEl(url, kind, cls = "pthumb") {
+  return url ? el("img", { class: cls, src: url, alt: "", loading: "lazy" })
+    : el("div", { class: `${cls} none`, "aria-hidden": "true" }, kind === "photos" ? "▦" : "▶");
+}
+
+// ------------------------------------------------------------------ tooltip
+// One tooltip for every chart mark; values also sit in labels/tables, so it never gates anything.
+const tip = $("#viz-tip");
+function attachTip(node, lines) {
+  node.tabIndex = 0;
+  node.setAttribute("aria-label", lines.join(", "));
+  const show = (x, y) => {
+    tip.replaceChildren(el("strong", {}, lines[0]), ...lines.slice(1).map((l) => el("div", {}, l)));
+    tip.hidden = false;
+    const r = tip.getBoundingClientRect();
+    tip.style.left = `${Math.min(Math.max(8, x - r.width / 2), innerWidth - r.width - 8)}px`;
+    tip.style.top = `${Math.max(8, y - r.height - 12)}px`;
+  };
+  node.addEventListener("pointermove", (e) => show(e.clientX, e.clientY));
+  node.addEventListener("pointerleave", () => { tip.hidden = true; });
+  node.addEventListener("focus", () => { const b = node.getBoundingClientRect(); show(b.left + b.width / 2, b.top); });
+  node.addEventListener("blur", () => { tip.hidden = true; });
+}
+
+// ----------------------------------------------------------------- my posts
+const postsState = { show: "all", q: "", platform: "", offset: 0, open: new Set() };
+
+async function loadPosts(append = false) {
+  const box = $("#posts-list");
+  if (!append) { postsState.offset = 0; box.classList.add("loading"); }
+  const params = new URLSearchParams({ show: postsState.show, q: postsState.q, platform: postsState.platform,
+    limit: "20", offset: String(postsState.offset) });
+  let data;
+  try { data = await api(`/api/posts?${params}`); } catch (err) { toast(err.message); box.classList.remove("loading"); return; }
+  box.classList.remove("loading");
+  if (!append) box.replaceChildren();
+  if (!data.total) {
+    const filtered = postsState.q || postsState.platform || postsState.show !== "all";
+    box.replaceChildren(el("div", { class: "empty" }, filtered ? "No posts match." :
+      el("span", {}, "Nothing posted yet. Your posts show up here with their links and numbers. ",
+        el("button", { class: "link inline-link", onclick: () => showTab("post") }, "Post something"))));
+  }
+  data.posts.forEach((p) => box.append(postItem(p)));
+  postsState.offset += data.posts.length;
+  $("#posts-more").hidden = postsState.offset >= data.total;
+  loadUpcoming();
+}
+
+function statusDot(status) {
+  const tone = (STATUS[status] || [status, ""])[1];
+  return el("span", { class: `sdot ${tone}`, "aria-hidden": "true" });
+}
+
+function postItem(p) {
+  const posted = p.posted_at ? when(p.posted_at) : "";
+  const chips = el("div", { class: "pchips" },
+    p.jobs.map((j) => el("span", { class: "pchip", title: (STATUS[j.status] || [j.status])[0] }, statusDot(j.status),
+      j.surface === "trial_reel" ? `${j.name} trial` : j.surface === "story" ? `${j.name} story` : j.name,
+      el("span", { class: "sr-only" }, `: ${(STATUS[j.status] || [j.status])[0]}`))),
+    p.rejected.map((r) => el("span", { class: "pchip", title: r.error }, statusDot("failed"), `${r.name} (not posted)`)));
+  const t = p.totals;
+  const nums = t.views || t.likes ? el("span", { class: "pnums" },
+    t.views ? el("span", {}, el("b", {}, num(t.views)), " views") : null,
+    t.likes ? el("span", {}, el("b", {}, num(t.likes)), " likes") : null) : null;
+  const detail = el("div", { class: "pdetail", hidden: !postsState.open.has(p.post_id) });
+  const head = el("button", { class: "phead", type: "button", "aria-expanded": String(postsState.open.has(p.post_id)),
+    onclick: () => toggleDetail(p, head, detail) },
+    thumbEl(p.thumb, p.kind),
+    el("div", { class: "pmain" },
+      el("div", { class: "pcaption" }, p.caption || el("span", { class: "muted" }, "(no caption)")),
+      el("div", { class: "pmeta" }, el("span", {}, posted), nums,
+        p.state === "upcoming" ? el("span", { class: "badge warn" }, "Scheduled") : null,
+        p.needs_you ? el("span", { class: "badge warn" }, "Needs you") : null),
+      chips));
+  const item = el("article", { class: "pitem", id: `post-${p.post_id}` }, head, detail);
+  if (!detail.hidden) renderPostDetail(p, detail);
+  return item;
+}
+
+function toggleDetail(p, head, detail, force) {
+  const open = force ?? detail.hidden;
+  detail.hidden = !open;
+  head.setAttribute("aria-expanded", String(open));
+  open ? postsState.open.add(p.post_id) : postsState.open.delete(p.post_id);
+  if (open && !detail.childElementCount) renderPostDetail(p, detail);
+}
+
+function renderPostDetail(p, box) {
+  const rows = p.jobs.map((j) => jobRow(p, j));
+  p.rejected.forEach((r) => rows.push(el("div", { class: "jrow" },
+    el("div", { class: "jtop" }, el("span", { class: "jname" }, r.name), badge("failed")),
+    el("div", { class: "jerr" }, `Not posted: ${r.error}`),
+    el("div", { class: "muted small" }, "Tip: “Post again” and tick “Trim to each platform's max length”, or pick a different video."))));
+  box.replaceChildren(...rows, el("div", { class: "pactions" },
+    el("button", { class: "secondary", onclick: () => refreshNumbers(p.post_id) }, "Update numbers"),
+    el("button", { class: "secondary", onclick: () => postAgain(p.post_id) }, "Post again"),
+    el("button", { class: "link danger", onclick: () => forgetPost(p) }, "Remove from history")));
+}
+
+function jobRow(p, j) {
+  const route = ROUTES[j.backend] || j.backend;
+  const status = j.status;
+  const numbers = numbersLine(j.metrics);
+  const row = el("div", { class: "jrow" },
+    el("div", { class: "jtop" },
+      el("span", { class: "jname" }, j.name, el("span", { class: "muted small" }, ` · ${j.surface.replaceAll("_", " ")} · via ${route}`)),
+      badge(status)),
+    status === "pending" || status === "scheduled" ? el("div", { class: "muted small" }, `Goes out ${when(j.run_at)}`) : null,
+    numbers ? el("div", { class: "jnums" }, numbers,
+      el("span", { class: "muted small" }, j.stats_source === "you" ? " · typed by you" : ` · updated ${ago(j.stats_at)}`)) : null,
+    j.url ? el("a", { href: j.url, target: "_blank", rel: "noopener", class: "jlink" }, "Open post ↗") : null,
+    j.error ? el("div", { class: "jerr" }, j.error) : null,
+    status === "handoff" ? el("div", { class: "muted small" }, "Waiting for you to post it from your phone. When it's up, mark it as posted so it counts.") : null,
+    status === "draft" ? el("div", { class: "muted small" }, "In your TikTok drafts: open TikTok, add a sound and post. Then mark it as posted.") : null);
+  const actions = el("div", { class: "jactions" });
+  const act = (label, fn, cls = "link") => actions.append(el("button", { class: cls, onclick: fn }, label));
+  if (status === "pending") act("Cancel", () => jobAction(j.id, "cancel"));
+  if (["failed", "skipped", "pending"].includes(status)) act(status === "pending" ? "Post now" : "Retry", () => jobAction(j.id, "retry"));
+  if (["handoff", "draft", "failed", "submitted"].includes(status)) act("Mark as posted", () => openForm(row, "posted", j));
+  if (!j.auto_stats && ["published", "handoff", "draft", "submitted", "scheduled_past"].includes(status)) act("Enter numbers", () => openForm(row, "numbers", j));
+  if (actions.childElementCount) row.append(actions);
+  return row;
+}
+
+function openForm(row, kind, j) {
+  row.querySelector(".jform")?.remove();
+  const form = el("form", { class: "jform" });
+  if (kind === "posted") {
+    form.append(el("label", {}, "Link to the post (optional)", el("input", { name: "url", type: "url", inputmode: "url", placeholder: "https://…" })));
+  } else {
+    form.append(el("div", { class: "numgrid" }, NUMS.slice(0, 4).map(([k, word]) => el("label", {}, word[0].toUpperCase() + word.slice(1),
+      el("input", { name: k, type: "number", min: "0", inputmode: "numeric", value: j.metrics[k] ?? "" })))));
+  }
+  form.append(el("div", { class: "actions" },
+    el("button", { class: "primary", type: "submit" }, "Save"),
+    el("button", { class: "secondary", type: "button", onclick: () => form.remove() }, "Cancel")));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const values = Object.fromEntries(new FormData(form).entries());
+    try {
+      await api(`/api/jobs/${j.id}/${kind}`, { json: values });
+      toast(kind === "posted" ? "Marked as posted" : "Numbers saved");
+      loadPosts();
+    } catch (err) { toast(err.message); }
+  });
+  row.append(form);
+  form.querySelector("input")?.focus();
+}
+
 async function jobAction(id, action) {
   try {
-    const r = await api(`/api/jobs/${id}/${action}`, { method: "POST" });
+    const r = await api(`/api/jobs/${id}/${action}`, { json: {} });
     toast(`${action === "cancel" ? "Cancelled" : "Result"}: ${(STATUS[r.status] || [r.status])[0]}${r.error ? ` (${r.error})` : ""}`);
   } catch (err) { toast(err.message); }
-  loadQueue();
+  loadPosts();
 }
-$("#refresh-queue").addEventListener("click", loadQueue);
 
-// ------------------------------------------------------------------- trials
+async function runRefresh(url, body = {}) {
+  toast("Fetching the latest numbers…");
+  try {
+    const { task_id } = await api(url, { json: body });
+    for (;;) {
+      const task = await api(`/api/tasks/${task_id}`);
+      if (task.state === "error") throw new Error(task.error);
+      if (task.state === "done") {
+        const r = task.result;
+        toast(r.errors.length ? `${r.text}. First problem: ${r.errors[0]}` : r.text[0].toUpperCase() + r.text.slice(1));
+        return r;
+      }
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+  } catch (err) { toast(err.message); return null; }
+}
+async function refreshNumbers(postId) { await runRefresh(`/api/posts/${postId}/refresh`); loadPosts(); }
+
+async function postAgain(postId) {
+  try {
+    const data = await api(`/api/posts/${postId}/reuse`, { json: {} });
+    state.upload = data;
+    renderPreviews();
+    $("#caption").value = data.caption || "";
+    $("#upload-status").textContent = "Loaded from My posts. Pick platforms, then Preview or Post.";
+    $("#opt-force").checked = true;
+    showTab("post");
+    renderMeters(); updateButtons();
+  } catch (err) { toast(err.message); }
+}
+
+async function forgetPost(p) {
+  if (!confirm("Remove this post from your history?\n\nIt stays on the platforms; vauto just stops tracking it.")) return;
+  try { await api(`/api/posts/${p.post_id}`, { method: "DELETE" }); toast("Removed from history"); loadPosts(); }
+  catch (err) { toast(err.message); }
+}
+
+async function loadUpcoming() {
+  let s;
+  try { s = await api("/api/summary?days=30"); } catch { return; }
+  // One row per post: its time, where it is going, and a way to manage it.
+  const groups = new Map();
+  for (const j of s.upcoming) {
+    const g = groups.get(j.post_id) || { ...j, names: [] };
+    g.names.push(j.name);
+    g.run_at = g.run_at < j.run_at ? g.run_at : j.run_at;
+    groups.set(j.post_id, g);
+  }
+  const card = $("#upcoming-card");
+  card.hidden = !groups.size;
+  $("#upcoming-count").textContent = groups.size ? `${groups.size} post${groups.size === 1 ? "" : "s"}` : "";
+  $("#upcoming-list").replaceChildren(...[...groups.values()].map((g) => el("div", { class: "urow" },
+    thumbEl(g.thumb, "video", "uthumb"),
+    el("div", { class: "umain" }, el("b", {}, when(g.run_at)),
+      el("div", { class: "small" }, g.caption), el("div", { class: "small" }, g.names.join(", "))),
+    el("button", { class: "link", onclick: () => openPost(g.post_id) }, "Manage"))));
+}
+
+function openPost(postId) {
+  const item = $(`#post-${postId}`);
+  if (!item) { toast("Scroll down to find it, or search its caption"); return; }
+  item.querySelector(".phead").click();
+  if (item.querySelector(".pdetail").hidden) item.querySelector(".phead").click();
+  item.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+$$("#tab-posts .seg button").forEach((b) => b.addEventListener("click", () => {
+  $$("#tab-posts .seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  postsState.show = b.dataset.show;
+  loadPosts();
+}));
+let searchTimer = null;
+$("#posts-q").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { postsState.q = e.target.value.trim(); loadPosts(); }, 250);
+});
+$("#posts-platform").addEventListener("change", (e) => { postsState.platform = e.target.value; loadPosts(); });
+$("#posts-more").addEventListener("click", () => loadPosts(true));
+$("#posts-refresh").addEventListener("click", async () => { await runRefresh("/api/stats/refresh", { days: 30 }); loadPosts(); });
+
+// -------------------------------------------------------------------- stats
+const statsState = { days: 30 };
+
+async function loadStats() {
+  const body = $("#stats-body");
+  body.classList.add("loading");
+  let s;
+  try { s = await api(`/api/summary?days=${statsState.days}`); } catch (err) { toast(err.message); body.classList.remove("loading"); return; }
+  body.classList.remove("loading");
+  $("#stats-updated").textContent = s.refreshed_at ? `Numbers updated ${ago(s.refreshed_at)}` : "";
+  renderKpis(s);
+  const note = $("#stats-note");
+  note.hidden = s.has_numbers;
+  note.replaceChildren(s.posts
+    ? el("span", {}, el("b", {}, "No view counts yet. "), "vauto reads numbers from Instagram and Facebook (direct), Threads, Bluesky, Mastodon and anything posted through Zernio (with its analytics add-on). Press ",
+      el("b", {}, "Update numbers"), ", or type them in on My posts for phone hand-offs.")
+    : el("span", {}, "Post something and your numbers will build up here."));
+  renderPlatformBars(s);
+  renderTopPosts(s);
+  renderHours(s);
+  renderCalendar(s);
+  renderHashtags(s);
+  loadTrials();
+}
+
+function renderKpis(s) {
+  const t = s.totals;
+  const tiles = [["Posts", s.posts, `${s.live} live across platforms`], ["Views", t.views], ["Likes", t.likes],
+    ["Comments", t.comments], ["Shares", t.shares]];
+  $("#kpis").replaceChildren(...tiles.map(([label, value, sub]) => el("div", { class: "kpi" },
+    el("div", { class: "kpi-label" }, label), el("div", { class: "kpi-value" }, num(value)),
+    sub ? el("div", { class: "kpi-sub" }, sub) : null)));
+}
+
+function emptyChart(text) { return el("div", { class: "chart-empty" }, text); }
+
+function renderPlatformBars(s) {
+  const box = $("#platform-bars");
+  const rows = s.platforms.filter((p) => p.posts);
+  if (!rows.length) { box.replaceChildren(emptyChart("No live posts in this period.")); return; }
+  const max = Math.max(...rows.map((r) => r.views), 1);
+  box.replaceChildren(el("div", { class: "hbars" }, rows.map((r) => {
+    const bar = el("div", { class: "hbar-fill", style: `width:${r.views ? Math.max(1.5, (r.views / max) * 100) : 0}%` });
+    const track = el("div", { class: "hbar-track" }, bar, el("span", { class: "hbar-value" }, r.views ? num(r.views) : "–"));
+    attachTip(track, [`${r.name}: ${num(r.views)} views`, `${r.posts} post(s), ${num(r.avg_views)} average`, `${num(r.likes)} likes · ${num(r.comments)} comments`]);
+    return el("div", { class: "hbar-row" },
+      el("div", { class: "hbar-label" }, el("span", {}, r.name), el("span", { class: "muted small" }, `${r.posts} post${r.posts === 1 ? "" : "s"}`)),
+      track);
+  })));
+}
+
+function renderTopPosts(s) {
+  const box = $("#top-posts");
+  if (!s.top.length) { box.replaceChildren(emptyChart("Your best posts show up here once numbers come in.")); return; }
+  box.replaceChildren(...s.top.map((p, i) => {
+    const link = (p.jobs.find((j) => j.url) || {}).url;
+    return el("div", { class: "trow" },
+      el("span", { class: "trank" }, `${i + 1}`), thumbEl(p.thumb, p.kind, "tthumb"),
+      el("div", { class: "tmain" }, el("div", { class: "pcaption" }, p.caption),
+        el("div", { class: "muted small" }, numbersLine(p.totals))),
+      link ? el("a", { href: link, target: "_blank", rel: "noopener", class: "small" }, "Open ↗") : null);
+  }));
+}
+
+function renderHours(s) {
+  const box = $("#hour-chart");
+  if (!s.enough_data) { box.replaceChildren(emptyChart("After a few posts with numbers, this shows which hours work best for you.")); return; }
+  const by = Object.fromEntries(s.by_hour.map((h) => [h.hour, h]));
+  const max = Math.max(...s.by_hour.map((h) => h.avg_views), 1);
+  const best = s.by_hour.reduce((a, b) => (b.avg_views > a.avg_views ? b : a));
+  const cols = [];
+  for (let h = 0; h < 24; h++) {
+    const d = by[h];
+    const col = el("div", { class: `vcol${d ? "" : " none"}${d && d === best ? " best" : ""}` },
+      d && d === best ? el("span", { class: "vcol-value" }, num(d.avg_views)) : null,
+      el("div", { class: "vcol-fill", style: `height:${d ? Math.max(3, (d.avg_views / max) * 100) : 0}%` }));
+    if (d) attachTip(col, [`${String(h).padStart(2, "0")}:00`, `${num(d.avg_views)} average views`, `${d.posts} post(s)`]);
+    cols.push(col);
+  }
+  box.replaceChildren(el("div", { class: "vcols" }, cols),
+    el("div", { class: "vaxis" }, ["00:00", "06:00", "12:00", "18:00", "23:00"].map((t) => el("span", {}, t))),
+    el("p", { class: "small" }, `Best so far: around ${String(best.hour).padStart(2, "0")}:00. Pick “Next best time” when posting to schedule for your best slots.`));
+}
+
+function renderCalendar(s) {
+  const box = $("#calendar");
+  const start = new Date(`${s.calendar.start}T12:00:00`);
+  const end = new Date(`${s.calendar.end}T12:00:00`);
+  const monday = new Date(start);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const weeks = [];
+  for (let w = new Date(monday); w <= end; w.setDate(w.getDate() + 7)) {
+    const cells = [];
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(w); day.setDate(day.getDate() + d);
+      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      const n = s.calendar.days[key] || 0;
+      const out = day < start || day > end;
+      const cell = el("div", { class: `cal-cell l${Math.min(n, 4)}${out ? " out" : ""}` });
+      if (!out) attachTip(cell, [day.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }), n ? `${n} post${n === 1 ? "" : "s"}` : "no posts"]);
+      cells.push(cell);
+    }
+    weeks.push(el("div", { class: "cal-week" }, cells));
+  }
+  $("#streak").textContent = s.streak > 1 ? `🔥 ${s.streak}-day streak.` : "";
+  box.replaceChildren(el("div", { class: "cal" },
+    el("div", { class: "cal-days", "aria-hidden": "true" }, ["Mon", "", "Wed", "", "Fri", "", "Sun"].map((d) => el("span", {}, d))),
+    el("div", { class: "cal-grid" }, weeks)),
+    el("div", { class: "cal-legend" }, "Fewer", [0, 1, 2, 3, 4].map((l) => el("span", { class: `cal-cell l${l}` })), "More"));
+}
+
+function renderHashtags(s) {
+  const box = $("#hashtags");
+  if (!s.enough_data || !s.hashtags.length) { box.replaceChildren(emptyChart("Hashtags you use will be ranked here once a few posts have numbers.")); return; }
+  box.replaceChildren(el("table", { class: "tight" },
+    el("thead", {}, el("tr", {}, ["Hashtag", "Posts", "Avg views"].map((h) => el("th", {}, h)))),
+    el("tbody", {}, s.hashtags.map((h) => el("tr", {}, el("td", {}, h.tag), el("td", { class: "num" }, h.posts), el("td", { class: "num" }, num(h.avg_views)))))));
+}
+
 async function loadTrials() {
   const box = $("#trials-list");
-  box.replaceChildren(el("div", { class: "empty" }, "Loading…"));
-  const items = await api("/api/trials");
-  if (!items.length) { box.replaceChildren(el("div", { class: "empty" }, "No Trial Reels yet. Tick “Instagram Trial Reel” when you post a video.")); return; }
-  box.replaceChildren(...items.map((t) => {
+  let items;
+  try { items = await api("/api/trials"); } catch (err) { box.replaceChildren(emptyChart(err.message)); return; }
+  if (!items.length) { box.replaceChildren(emptyChart("No Trial Reels yet. Tick “Instagram Trial Reel” when you post a video.")); return; }
+  box.replaceChildren(el("div", { class: "legend-row" },
+      el("span", {}, el("i", { class: "sw s1" }), "Main reel"), el("span", {}, el("i", { class: "sw s2" }), "Trial reel")),
+    ...items.map((t) => {
     const keys = ["views", "reach", "likes", "comments", "shares", "saved"].filter((k) => (t.main || {})[k] !== undefined || (t.trial || {})[k] !== undefined);
-    const bars = keys.length ? el("div", { class: "bars" }, keys.map((k) => {
+    const bars = keys.length ? el("div", { class: "tbars" }, keys.map((k) => {
       const a = (t.main || {})[k] || 0, b = (t.trial || {})[k] || 0, max = Math.max(a, b, 1);
-      return [el("span", {}, k), el("div", { class: "bar" },
-        el("div", { class: "main", style: `width:${(a / max) * 100}%` }), el("span", {}, `main ${a}`),
-        el("div", { class: "trialbar", style: `width:${(b / max) * 100}%` }), el("span", {}, `trial ${b}`))];
+      const pair = el("div", { class: "tbar-pair" },
+        el("div", { class: "tbar" }, el("div", { class: "tbar-fill s1", style: `width:${(a / max) * 100}%` }), el("span", {}, num(a))),
+        el("div", { class: "tbar" }, el("div", { class: "tbar-fill s2", style: `width:${(b / max) * 100}%` }), el("span", {}, num(b))));
+      attachTip(pair, [k, `main ${num(a)}`, `trial ${num(b)}`]);
+      return [el("span", { class: "tbar-label" }, k), pair];
     })) : null;
     return el("div", { class: "trial" },
-      el("div", { class: "row card-head" }, el("b", {}, `Post ${t.post_id}`), t.winner ? el("span", { class: `badge ${t.winner === "trial" ? "ok" : "info"}` }, `${t.winner} wins`) : null),
+      el("div", { class: "row card-head" }, el("b", {}, `Post ${t.post_id}`),
+        t.winner ? el("span", { class: `badge ${t.winner === "trial" ? "ok" : "info"}` }, `${t.winner} wins`) : null),
       el("div", { class: "small" },
         t.main_url ? el("a", { href: t.main_url, target: "_blank", rel: "noopener" }, "Main reel ↗") : null, " ",
         t.trial_url ? el("a", { href: t.trial_url, target: "_blank", rel: "noopener" }, "Trial reel ↗") : null),
@@ -451,7 +815,55 @@ async function loadTrials() {
       (t.notes || []).length ? el("ul", { class: "notes" }, t.notes.map((n) => el("li", {}, n))) : null);
   }));
 }
-$("#refresh-trials").addEventListener("click", loadTrials);
+
+$$("#tab-stats .seg button").forEach((b) => b.addEventListener("click", () => {
+  $$("#tab-stats .seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  statsState.days = Number(b.dataset.days);
+  loadStats();
+}));
+$("#stats-refresh").addEventListener("click", async () => { await runRefresh("/api/stats/refresh", { days: statsState.days || 3650 }); loadStats(); });
+
+// ----------------------------------------------------------------- snippets
+async function loadSnippets() {
+  let items = [];
+  try { items = await api("/api/snippets"); } catch { return; }
+  $("#snippet-chips").replaceChildren(...items.map((sn) => el("span", { class: "snip" },
+    el("button", { type: "button", class: "snip-use", title: sn.text, onclick: () => insertSnippet(sn.text) }, `+ ${sn.name}`),
+    el("button", { type: "button", class: "snip-del", "aria-label": `Delete saved text ${sn.name}`, onclick: async () => {
+      if (!confirm(`Delete “${sn.name}”?`)) return;
+      await api(`/api/snippets/${sn.id}`, { method: "DELETE" }).catch((err) => toast(err.message));
+      loadSnippets();
+    } }, "×"))));
+}
+function insertSnippet(text) {
+  const box = $("#caption");
+  const start = box.selectionStart ?? box.value.length, end = box.selectionEnd ?? box.value.length;
+  const before = box.value.slice(0, start), after = box.value.slice(end);
+  const glue = before && !/\s$/.test(before) ? (text.startsWith("#") ? " " : "\n\n") : "";
+  box.value = before + glue + text + after;
+  box.focus();
+  const pos = (before + glue + text).length;
+  box.setSelectionRange(pos, pos);
+  renderMeters(); updateButtons();
+}
+$("#snippet-toggle").addEventListener("click", () => {
+  const form = $("#snippet-form");
+  form.hidden = !form.hidden;
+  $("#snippet-toggle").setAttribute("aria-expanded", String(!form.hidden));
+  if (!form.hidden) $("#snippet-name").focus();
+});
+$("#snippet-save").addEventListener("click", async () => {
+  const text = $("#caption").value.trim();
+  if (!text) { toast("Write the caption or hashtags first, then save them"); return; }
+  try {
+    await api("/api/snippets", { json: { name: $("#snippet-name").value, text } });
+    $("#snippet-name").value = "";
+    $("#snippet-form").hidden = true;
+    $("#snippet-toggle").setAttribute("aria-expanded", "false");
+    toast("Saved. Tap it any time to add it to a caption.");
+    loadSnippets();
+  } catch (err) { toast(err.message); }
+});
 
 // -------------------------------------------------------------------- setup
 async function loadChecks(online = false) {
@@ -548,7 +960,7 @@ async function loadSharedUpload() {
       : `${state.upload.files.length} shared photo(s)`;
     toast("Got it. Add your caption, pick platforms, then Preview or Post.");
   } catch (err) { toast(err.message); }
-  history.replaceState(null, "", location.pathname + location.hash);
+  history.replaceState(null, "", location.pathname + (location.hash || "#post"));
   renderMeters();
   updateButtons();
 }
@@ -557,9 +969,10 @@ async function loadSharedUpload() {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => { /* installing is optional */ });
 }
+loadSnippets();
 loadStatus().then(async () => {
   await loadSharedUpload();
   updateButtons();
   const tab = location.hash.replace("#", "");
-  if (tab && $(`#tab-${tab}`)) showTab(tab);
+  if (tab && $(`#tab-${tab}`)) showTab(tab, false);
 }).catch((err) => toast(err.message));

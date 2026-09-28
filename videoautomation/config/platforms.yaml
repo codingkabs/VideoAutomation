@@ -29,6 +29,7 @@ platforms:
     photos: {max_items: 10, max_mb: 8, size: [1080, 1350]}
     caption: {max_chars: 2200, max_hashtags: 5}
     rate_limit: "100 API posts per rolling 24 h"
+    daily_limit: 100  # posts per rolling 24 h; vauto warns before you hit it
 
   facebook:
     name: Facebook Page
@@ -43,6 +44,7 @@ platforms:
     photos: {max_items: 10, max_mb: 10, size: null}
     caption: {max_chars: 63206, max_hashtags: null}
     rate_limit: "30 API Reels per rolling 24 h per Page"
+    daily_limit: 30  # posts per rolling 24 h; vauto warns before you hit it
 
   tiktok:
     name: TikTok
@@ -57,6 +59,7 @@ platforms:
     photos: {max_items: 35, max_mb: 20, size: [1080, 1920]}
     caption: {max_chars: 2200, max_hashtags: null, photo_title_max: 90, photo_description_max: 4000, unit: utf16}
     rate_limit: "~15 posts/day/creator across all apps; 5 drafts/24 h"
+    daily_limit: 15  # posts per rolling 24 h; vauto warns before you hit it
 
   youtube:
     name: YouTube Shorts
@@ -100,6 +103,7 @@ platforms:
     photos: {max_items: 10, max_mb: 8, size: null}
     caption: {max_chars: 500, max_hashtags: 1}
     rate_limit: "250 posts per 24 h"
+    daily_limit: 250  # posts per rolling 24 h; vauto warns before you hit it
 
   x:
     name: X (Twitter)

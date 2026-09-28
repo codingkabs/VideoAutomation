@@ -173,6 +173,10 @@ class Settings:
     # Web UI
     web_password: str | None = None
 
+    # My posts: numbers refresh and summaries
+    stats_refresh_hours: int = 6
+    digest: str = "weekly"  # weekly | daily | off
+
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None, dotenv: Path | None = None) -> "Settings":
         merged: dict[str, str] = dict(os.environ if env is None else env)
@@ -202,6 +206,13 @@ class Settings:
         graduation = (g("VAUTO_TRIAL_GRADUATION") or "MANUAL").upper()
         if graduation not in ("MANUAL", "SS_PERFORMANCE"):
             raise ConfigError("VAUTO_TRIAL_GRADUATION must be MANUAL or SS_PERFORMANCE")
+        digest = (g("VAUTO_DIGEST") or "weekly").lower()
+        if digest not in ("weekly", "daily", "off"):
+            raise ConfigError("VAUTO_DIGEST must be weekly, daily or off")
+        try:
+            stats_hours = int(g("VAUTO_STATS_REFRESH_HOURS") or 6)
+        except ValueError as exc:
+            raise ConfigError("VAUTO_STATS_REFRESH_HOURS must be a whole number of hours (0 turns it off)") from exc
         style = (g("VAUTO_SUBTITLE_STYLE") or "bold").lower()
         if style not in ("bold", "clean"):
             raise ConfigError("VAUTO_SUBTITLE_STYLE must be bold or clean")
@@ -279,6 +290,8 @@ class Settings:
             anthropic_api_key=opt("ANTHROPIC_API_KEY"),
             caption_model=g("VAUTO_CAPTION_MODEL") or "claude-opus-5",
             web_password=opt("VAUTO_WEB_PASSWORD"),
+            stats_refresh_hours=max(0, stats_hours),
+            digest=digest,
         )
 
     def trial_backend_for(self) -> str:

@@ -29,7 +29,8 @@ GROUP_SETTLE_SECONDS = 2.0
 HELP = (
     "Send me a video (or up to 10 photos) with your caption and I'll post it everywhere.\n\n"
     "Tip: send videos as a <b>file</b> (📎 → File) so Telegram doesn't compress them.\n\n"
-    "Commands:\n/status  what's set up\n/jobs  recent posts\n/trials  Trial Reel results\n/cancel  drop the current post"
+    "Commands:\n/posts  your recent posts and their numbers\n/stats  your last 7 days\n/status  what's set up\n"
+    "/trials  Trial Reel results\n/cancel  drop the current post"
 )
 
 
@@ -144,6 +145,10 @@ class Bot:
             self.api.send_message(chat_id, "\n".join(lines) or "No posts yet.")
         elif command == "/trials":
             self.executor.submit(self._trials, chat_id)
+        elif command == "/posts":
+            self.api.send_message(chat_id, self._posts_text())
+        elif command == "/stats":
+            self.executor.submit(self._stats, chat_id)
         else:
             self.api.send_message(chat_id, HELP, parse_mode="HTML")
 
@@ -295,6 +300,42 @@ class Bot:
         except Exception as exc:  # keep the bot alive
             session.busy = False
             api.send_message(chat_id, f"⚠️ Unexpected error: {type(exc).__name__}: {exc}")
+
+    def _posts_text(self, limit: int = 5) -> str:
+        from .tracker import Tracker, compact, short
+
+        if not self.settings.db_path.is_file():
+            return "No posts yet. Send me a video to start."
+        posts = Tracker.open(self.settings).posts(self.settings, limit=limit)["posts"]
+        if not posts:
+            return "No posts yet. Send me a video to start."
+        blocks = []
+        for p in posts:
+            t = p["totals"]
+            numbers = " · ".join(f"{compact(t[k])} {word}" for k, word in (("views", "views"), ("likes", "likes"))
+                                 if t.get(k))
+            lines = [f"🎬 {short(p['caption'], 60) or '(no caption)'}" + (f"\n   {numbers}" if numbers else "")]
+            for j in p["jobs"]:
+                status = j["status"].replace("_past", "")
+                lines.append(f"   {notify.ICONS.get(status, '•')} {j['name']}"
+                             + (f": {j['url']}" if j["url"] else f": {j['error']}" if j["error"] else ""))
+            blocks.append("\n".join(lines))
+        return "\n\n".join(blocks) + "\n\nAll posts and numbers: the vauto app → My posts."
+
+    def _stats(self, chat_id: int) -> None:
+        from .stats import refresh
+        from .tracker import Tracker, digest_text
+
+        api = self.api_factory()
+        if not self.settings.db_path.is_file():
+            api.send_message(chat_id, "No posts yet.")
+            return
+        tracker = Tracker.open(self.settings)
+        try:
+            refresh(self.settings, tracker, days=7)
+        except Exception:  # numbers are best effort; show what is saved
+            pass
+        api.send_message(chat_id, digest_text(self.settings, tracker, days=7))
 
     def _trials(self, chat_id: int) -> None:
         from .insights import compare, trial_keys

@@ -7,6 +7,7 @@ network, start it with --host 0.0.0.0 and set VAUTO_WEB_PASSWORD.
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import secrets
 import threading
@@ -26,10 +27,12 @@ from ..media.variants import VariantOptions
 from ..models import label_for
 from ..scheduler import JobStore
 from ..timing import zone
+from ..tracker import Tracker
 
 STATIC = Path(__file__).parent / "static"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 TASK_TTL = 6 * 3600
+JSON_EXEMPT = ("/api/upload", "/api/subtitles")  # file uploads; every other API write must be JSON
 
 
 def create_app(settings: Settings):
@@ -62,7 +65,10 @@ def create_app(settings: Settings):
             origin = request.headers.get("Origin")
             if origin and origin.split("://", 1)[-1] != request.host and request.path != "/share":
                 return Response("Cross-site request blocked", 403)  # CSRF guard
-            if request.path in ("/api/tasks", "/api/settings") and not request.is_json:
+            # Writes with a body must be JSON (a cross-site form cannot send that without CORS).
+            # DELETE carries no body; the Origin check above covers it.
+            if request.method in ("POST", "PUT", "PATCH") and request.path.startswith("/api/") \
+                    and request.path not in JSON_EXEMPT and not request.is_json:
                 return Response("Expected JSON", 415)
         if not password:
             return None
@@ -319,6 +325,27 @@ def create_app(settings: Settings):
         except Exception as exc:  # pragma: no cover - surfaced to the UI
             task.update(state="error", error=f"{type(exc).__name__}: {exc}")
 
+    def background(kind: str, fn) -> str:
+        """Run ``fn(progress)`` in a thread; poll /api/tasks/<id> for the result."""
+        now = time.time()
+        with lock:
+            for key in [k for k, t in tasks.items() if now - t["created"] > TASK_TTL]:
+                tasks.pop(key, None)
+            task_id = secrets.token_hex(6)
+            tasks[task_id] = {"state": "running", "progress": [], "created": now, "action": kind}
+
+        def work() -> None:
+            task = tasks[task_id]
+            try:
+                task.update(state="done", result=fn(task["progress"].append))
+            except VautoError as exc:
+                task.update(state="error", error=str(exc))
+            except Exception as exc:  # pragma: no cover - surfaced to the UI
+                task.update(state="error", error=f"{type(exc).__name__}: {exc}")
+
+        threading.Thread(target=work, daemon=True).start()
+        return task_id
+
     @app.post("/api/tasks")
     def start_task():
         body = request.get_json() or {}
@@ -340,6 +367,117 @@ def create_app(settings: Settings):
         if task is None:
             return jsonify({"error": "unknown task"}), 404
         return jsonify({k: v for k, v in task.items() if k != "created"})
+
+    # ------------------------------------------------------------- my posts
+    def tracker() -> Tracker:
+        return Tracker.open(cfg())
+
+    def post_view(p: dict[str, Any]) -> dict[str, Any]:
+        out = dict(p)
+        out["thumb"] = media_url(p["thumb"]) if p.get("thumb") else None
+        out.pop("inputs", None)  # local file paths stay on this computer
+        return out
+
+    @app.get("/api/posts")
+    def list_posts():
+        a = request.args
+        data = tracker().posts(cfg(), query=a.get("q", ""), platform=a.get("platform", ""),
+                               show=a.get("show", "all"), limit=min(int(a.get("limit", 30)), 200),
+                               offset=int(a.get("offset", 0)))
+        return jsonify({"total": data["total"], "posts": [post_view(p) for p in data["posts"]]})
+
+    @app.get("/api/posts/<post_id>")
+    def get_post(post_id: str):
+        t = tracker()
+        p = post_view(t.describe(secure_filename(post_id), settings=cfg()))
+        full = {r.idem_key[:10]: r.idem_key for r in t.store.rows(post_id=p["post_id"], limit=1000)}
+        for j in p["jobs"]:
+            j["history"] = t.history(full[j["id"]]) if j["id"] in full else []
+        return jsonify(p)
+
+    @app.delete("/api/posts/<post_id>")
+    def forget_post(post_id: str):
+        tracker().forget(secure_filename(post_id))
+        return jsonify({"ok": True})
+
+    @app.post("/api/posts/<post_id>/refresh")
+    def refresh_post(post_id: str):
+        from ..stats import refresh
+
+        pid = secure_filename(post_id)
+        return jsonify({"task_id": background("refresh", lambda _p: refresh(cfg(), tracker(), post_id=pid).to_dict())})
+
+    @app.post("/api/stats/refresh")
+    def refresh_all():
+        from ..stats import refresh
+
+        days = int((request.get_json() or {}).get("days") or 30)
+        return jsonify({"task_id": background("refresh", lambda _p: refresh(cfg(), tracker(), days=days).to_dict())})
+
+    @app.post("/api/posts/<post_id>/reuse")
+    def reuse_post(post_id: str):
+        """Load a post's video or photos into the Post screen again (post to more places, or repost)."""
+        import shutil
+
+        pid = secure_filename(post_id)
+        t = tracker()
+        row = t.post_row(pid) or {}
+        sources = [Path(x) for x in json.loads(row.get("inputs") or "[]") if Path(x).is_file()]
+        if not sources:
+            work = cfg().renders_dir / pid
+            masters = sorted(work.glob("master_*.mp4"), key=lambda x: ("subs" in x.name, x.name != "master_auto.mp4"))
+            photos = sorted(work.glob("photo_instagram_*.jpg")) or sorted(work.glob("photo_*_*.jpg"))
+            sources = masters[:1] or photos
+        if not sources:
+            raise VautoError("The original files are gone; add the video again")
+        upload_id = uuid.uuid4().hex[:12]
+        folder = uploads / upload_id
+        folder.mkdir(parents=True, exist_ok=True)
+        for i, src in enumerate(sources):
+            name = src.name.split("_", 1)[-1] if src.parent.parent == uploads else src.name
+            shutil.copy2(src, folder / f"{i:02d}_{secure_filename(name) or 'file'}")
+        data = describe_upload(upload_id)
+        data["caption"] = row.get("caption") or t.describe(pid)["caption"]
+        return jsonify(data)
+
+    @app.post("/api/jobs/<job_id>/posted")
+    def job_posted(job_id: str):
+        body = request.get_json() or {}
+        return jsonify(tracker().mark_posted(secure_filename(job_id), body.get("url")).to_dict())
+
+    @app.post("/api/jobs/<job_id>/numbers")
+    def job_numbers(job_id: str):
+        return jsonify({"metrics": tracker().set_numbers(secure_filename(job_id), request.get_json() or {})})
+
+    @app.get("/api/summary")
+    def summary():
+        days = int(request.args.get("days", 30)) or None
+        data = tracker().summary(cfg(), days=days)
+        data["top"] = [post_view(p) for p in data["top"]]
+        for j in data["upcoming"]:
+            j["thumb"] = media_url(j["thumb"]) if j.get("thumb") else None
+        data["timezone"] = str(zone(cfg()))
+        return jsonify(data)
+
+    @app.get("/api/export.csv")
+    def export_csv():
+        stamp = time.strftime("%Y-%m-%d")
+        return Response(tracker().export_csv(cfg()), mimetype="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="vauto-posts-{stamp}.csv"'})
+
+    @app.get("/api/snippets")
+    def list_snippets():
+        return jsonify(tracker().snippets())
+
+    @app.post("/api/snippets")
+    def add_snippet():
+        body = request.get_json() or {}
+        return jsonify(tracker().add_snippet(str(body.get("name", "")), str(body.get("text", ""))))
+
+    @app.delete("/api/snippets/<int:snippet_id>")
+    def delete_snippet(snippet_id: int):
+        tracker().delete_snippet(snippet_id)
+        return jsonify({"ok": True})
 
     # ----------------------------------------------------------------- jobs
     @app.get("/api/jobs")

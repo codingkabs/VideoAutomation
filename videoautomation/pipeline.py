@@ -225,8 +225,21 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
         _plan_video(req, settings, infos[0], work, texts, plan, add_job, reject)
     else:
         _plan_photos(req, settings, images, work, texts, plan, add_job, reject)
+    plan.notes.extend(_limit_notes(settings, sorted({j.platform for j in plan.jobs}), req.publish_at))
     plan.notes = list(dict.fromkeys(plan.notes))
     return plan
+
+
+def _limit_notes(settings: Settings, platforms: list[str], publish_at: str | None) -> list[str]:
+    """Warn when a platform's daily posting limit is close (from your post history)."""
+    if not settings.db_path.is_file():
+        return []
+    from .tracker import Tracker
+
+    try:
+        return Tracker(settings.db_path).limit_notes(platforms, parse_iso(publish_at) if publish_at else None)
+    except Exception:  # history is a nice-to-have; never block a post on it
+        return []
 
 
 def _subtitle_cues(req: PostRequest, settings: Settings, master: MediaInfo, work: Path,
@@ -404,6 +417,11 @@ def execute(plan: PostPlan, settings: Settings, req: PostRequest) -> list[PostRe
             if key not in publishers:
                 publishers[key] = make_publisher(job.backend, job.platform, settings, storage, req.dry_run)
             return publishers[key]
+
+    if not req.dry_run:
+        from .tracker import Tracker
+
+        Tracker(store).record_post(plan, req)
 
     results: list[PostResult] = list(plan.results)
     now_jobs, later_jobs = [], []

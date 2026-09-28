@@ -54,6 +54,18 @@ def create_app(settings: Settings):
     uploads = cfg().home / "uploads"
 
     # ------------------------------------------------------------- security
+    def own_hosts() -> set[str]:
+        """Addresses this app is reached on. A proxy such as `tailscale serve` may pass
+        its own name in X-Forwarded-Host, and VAUTO_PUBLIC_URL is the phone address."""
+        hosts = {request.host}
+        forwarded = request.headers.get("X-Forwarded-Host")
+        if forwarded:
+            hosts.add(forwarded.split(",")[0].strip())
+        public = (cfg().env.get("VAUTO_PUBLIC_URL") or "").strip().rstrip("/")
+        if public:
+            hosts.add(public.split("://", 1)[-1].split("/", 1)[0])
+        return hosts
+
     @app.before_request
     def guard():
         password = cfg().web_password
@@ -63,7 +75,7 @@ def create_app(settings: Settings):
             return Response("Open vauto at http://127.0.0.1 or set VAUTO_WEB_PASSWORD", 403)
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("Origin")
-            if origin and origin.split("://", 1)[-1] != request.host and request.path != "/share":
+            if origin and origin.split("://", 1)[-1] not in own_hosts() and request.path != "/share":
                 return Response("Cross-site request blocked", 403)  # CSRF guard
             # Writes with a body must be JSON (a cross-site form cannot send that without CORS).
             # DELETE carries no body; the Origin check above covers it.

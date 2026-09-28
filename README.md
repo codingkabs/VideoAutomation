@@ -59,7 +59,7 @@ Run `vauto platforms` to see every platform and whether it is set up.
 The quickest path takes about 20 minutes on a Mac or Windows PC.
 
 1. **Accounts.** Sign up at zernio.com. Connect Instagram, your Facebook Page, TikTok, YouTube and Snapchat (a few taps each, like logging in), then create an API key.
-2. **Install.** Install [Python 3.10+](https://www.python.org/downloads/) and ffmpeg (`brew install ffmpeg` on Mac, `winget install ffmpeg` on Windows). Then:
+2. **Install.** Install [Python 3.10+](https://www.python.org/downloads/) and ffmpeg (`brew install ffmpeg` on Mac, `winget install Gyan.FFmpeg` on Windows, then open a new terminal). Then:
    ```bash
    cd VideoAutomation
    pip install -e ".[web]"
@@ -93,7 +93,8 @@ Your phone only sends the video; the work happens on a computer (or small server
 **3. Give it a secure address your phone can reach.** Phones only install web apps and accept shares over https. The simplest free option is [Tailscale](https://tailscale.com):
 
 - Install Tailscale on the computer and on your phone, and sign in to both with the same account.
-- On the computer, run `tailscale serve --bg 8765`. It prints an address like `https://your-pc.tail1234.ts.net`.
+- On the computer, run `tailscale serve --bg 8765`. It prints an address like `https://your-pc.tail1234.ts.net` (the first time, it asks you to turn on HTTPS for your Tailscale network; say yes).
+- Keep Tailscale switched on in the phone app whenever you use vauto.
 - Set `VAUTO_PUBLIC_URL` to that address.
 
 This works from anywhere (home, mobile data, abroad) and nobody else can reach it. `vauto phone` prints all your exact values, including the ones for the iPhone Shortcut below.
@@ -134,7 +135,7 @@ Now **Share → Post with vauto** uploads the video and opens vauto with it load
 You need Python 3.10+ and ffmpeg.
 
 ```bash
-# macOS: brew install ffmpeg      Ubuntu/Debian: sudo apt install ffmpeg      Windows: winget install ffmpeg
+# macOS: brew install ffmpeg      Ubuntu/Debian: sudo apt install ffmpeg      Windows: winget install Gyan.FFmpeg
 git clone <this repo> && cd VideoAutomation
 pip install -e ".[all]"
 playwright install chromium        # only for Rutube/Likee/Dzen/Naver Clip

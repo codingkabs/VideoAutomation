@@ -214,3 +214,28 @@ def test_results_do_not_change_for_standard_video(settings):
     """Non-HDR sources skip tone-mapping entirely (no behaviour change for most phone exports)."""
     assert not probe_stub().is_hdr
     assert PostResult("x", "y", "published").ok
+
+
+def test_phone_address_behind_a_proxy_is_not_treated_as_cross_site(settings, tmp_path):
+    pytest.importorskip("flask")
+    import base64
+
+    from videoautomation.web.app import create_app
+
+    settings.web_password = "pw"
+    settings.dotenv_path = tmp_path / ".env"
+    settings.env["VAUTO_PUBLIC_URL"] = "https://my-pc.tail1234.ts.net"
+    client = create_app(settings).test_client()
+    auth = {"Authorization": "Basic " + base64.b64encode(b"vauto:pw").decode()}
+    phone = {**auth, "Origin": "https://my-pc.tail1234.ts.net"}
+    # tailscale serve may forward to 127.0.0.1:8765 with the original name in X-Forwarded-Host
+    ok = client.post("/api/snippets", json={"name": "a", "text": "b"}, headers=phone,
+                     base_url="http://127.0.0.1:8765")
+    assert ok.status_code == 200
+    proxied = client.post("/api/snippets", json={"name": "c", "text": "d"},
+                          headers={**auth, "Origin": "https://other.ts.net", "X-Forwarded-Host": "other.ts.net"},
+                          base_url="http://127.0.0.1:8765")
+    assert proxied.status_code == 200
+    evil = client.post("/api/snippets", json={"name": "e", "text": "f"},
+                       headers={**auth, "Origin": "https://evil.example"}, base_url="http://127.0.0.1:8765")
+    assert evil.status_code == 403

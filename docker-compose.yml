@@ -26,7 +26,10 @@ services:
     <<: *vauto
     command: ["vauto", "web", "--host", "0.0.0.0", "--port", "8765"]
     ports:
-      - "8765:8765"
+      # Only this machine can open the app; `tailscale serve --bg 8765` gives your phone a
+      # private https address. (Docker ignores firewalls, so never publish it on 0.0.0.0 on a
+      # server.) At home, VAUTO_BIND=0.0.0.0 also allows other devices on your Wi-Fi.
+      - "${VAUTO_BIND:-127.0.0.1}:8765:8765"
 
   worker:
     <<: *vauto

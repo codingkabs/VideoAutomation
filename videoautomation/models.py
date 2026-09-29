@@ -92,7 +92,8 @@ class PostJob:
 @dataclass
 class PostResult:
     """Outcome of one job. ``status`` is one of: published, scheduled, queued,
-    draft, failed, skipped, dry_run, duplicate."""
+    draft (in the platform's own drafts), held (a draft kept in vauto until you post it),
+    failed, skipped, dry_run, duplicate."""
 
     platform: str
     surface: str

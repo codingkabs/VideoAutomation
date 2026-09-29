@@ -201,7 +201,9 @@ class ZernioPublisher(Publisher):
             raise PublishError(f"{job.platform} via Zernio: {error}")
         url = next((entry.get(k) for k in URL_KEYS if entry.get(k)), None)
         final = "draft" if job.options.get("draft") else "published"
-        if final == "draft":
+        if final == "draft" and job.platform == "youtube":
+            notes = notes + ["uploaded as Private: in the YouTube app, open it and set it to Public to post it"]
+        elif final == "draft":
             notes = notes + ["sent to your TikTok inbox: open TikTok, add a sound, and post"]
         return PostResult(job.platform, job.surface, final, url=url, remote_id=post_id, notes=notes,
                           platform_post_id=entry.get("platformPostId"))

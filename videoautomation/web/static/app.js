@@ -60,7 +60,7 @@ const STATUS = {
   published: ["Posted", "ok"], reported: ["Reported", "ok"], draft: ["In drafts", "info"], handoff: ["To phone", "info"],
   scheduled: ["Scheduled", "warn"], queued: ["Queued", "warn"], pending: ["Queued", "warn"], running: ["Running", "warn"],
   submitted: ["Submitted", "warn"], dry_run: ["Preview", "info"], duplicate: ["Already done", ""],
-  scheduled_past: ["Should be live", "ok"],
+  scheduled_past: ["Should be live", "ok"], held: ["Draft", "info"],
   skipped: ["Skipped", ""], failed: ["Failed", "bad"],
 };
 const badge = (status) => {
@@ -73,7 +73,7 @@ const ROUTES = {
   mastodon: "Mastodon API", tiktok: "TikTok drafts", handoff: "hand-off to phone", browser: "browser automation",
   sau: "social-auto-upload", insights: "results check",
 };
-const DEBUG_NOTE = /^(backend|media|caption|title|tags|trial_graduation|thumb_offset_ms|content_type|draft|subreddit|board_id)=/;
+const DEBUG_NOTE = /^(backend|media|caption|title|tags|trial_graduation|thumb_offset_ms|content_type|draft|hold|subreddit|board_id)=/;
 
 // -------------------------------------------------------------------- state
 const state = {
@@ -114,6 +114,7 @@ async function loadStatus() {
   }
   const d = state.status.defaults;
   $("#opt-trial").checked = d.trial;
+  $("#opt-drafts").checked = !!d.drafts;
   $("#trial-options").hidden = !d.trial;
   $("#opt-delay-lo").value = d.trial_delay[0];
   $("#opt-delay-hi").value = d.trial_delay[1];
@@ -316,6 +317,7 @@ function collectOptions() {
     trial_mirror: $("#opt-mirror").checked,
     graduation: $("#opt-graduation").value,
     tiktok_draft: $("#opt-draft").checked,
+    drafts: $("#opt-drafts").checked,
     ig_story: $("#opt-story").checked,
     fit: $("#opt-fit").value,
     trim: $("#opt-trim").checked,
@@ -330,13 +332,20 @@ function updateButtons() {
   $("#btn-preview").disabled = !ok;
   $("#btn-post").disabled = !ok;
   const whenMode = $("#opt-when").value;
-  $("#btn-post").textContent = whenMode ? "Schedule" : `Post to ${state.selected.size}`;
+  const drafts = $("#opt-drafts").checked;
+  $("#btn-post").textContent = drafts ? `Save ${state.selected.size} draft${state.selected.size === 1 ? "" : "s"}`
+    : whenMode ? "Schedule" : `Post to ${state.selected.size}`;
+  $("#opt-when").disabled = drafts;  // drafts are saved now; you pick the time when you post them
 }
 $("#opt-when").addEventListener("change", updateButtons);
+$("#opt-drafts").addEventListener("change", updateButtons);
 $("#btn-preview").addEventListener("click", () => startTask("preview"));
 $("#btn-post").addEventListener("click", () => {
   const names = [...state.selected].map((k) => state.status.platforms.find((p) => p.key === k).name);
-  if (confirm(`Post to ${names.length} platform(s)?\n\n${names.join(", ")}`)) startTask("post");
+  const ask = $("#opt-drafts").checked
+    ? `Save as drafts on ${names.length} platform(s)? Nothing is published yet.\n\n${names.join(", ")}`
+    : `Post to ${names.length} platform(s)?\n\n${names.join(", ")}`;
+  if (confirm(ask)) startTask("post");
 });
 
 async function startTask(action) {
@@ -533,6 +542,7 @@ function renderPostDetail(p, box) {
     el("div", { class: "jerr" }, `Not posted: ${r.error}`),
     el("div", { class: "muted small" }, "Tip: “Post again” and tick “Trim to each platform's max length”, or pick a different video."))));
   box.replaceChildren(...rows, el("div", { class: "pactions" },
+    p.drafts ? el("button", { class: "primary", onclick: () => publishDrafts(p) }, `Post drafts (${p.drafts})`) : null,
     el("button", { class: "secondary", onclick: () => refreshNumbers(p.post_id) }, "Update numbers"),
     el("button", { class: "secondary", onclick: () => postAgain(p.post_id) }, "Post again"),
     el("button", { class: "link danger", onclick: () => forgetPost(p) }, "Remove from history")));
@@ -552,12 +562,20 @@ function jobRow(p, j) {
     j.url ? el("a", { href: j.url, target: "_blank", rel: "noopener", class: "jlink" }, "Open post ↗") : null,
     j.error ? el("div", { class: "jerr" }, j.error) : null,
     status === "handoff" ? el("div", { class: "muted small" }, "Waiting for you to post it from your phone. When it's up, mark it as posted so it counts.") : null,
-    status === "draft" ? el("div", { class: "muted small" }, "In your TikTok drafts: open TikTok, add a sound and post. Then mark it as posted.") : null);
+    status === "draft" ? el("div", { class: "muted small" }, j.platform === "youtube"
+      ? "Uploaded as Private: in the YouTube app, set it to Public when you're ready. Then mark it as posted."
+      : "In your TikTok drafts: open TikTok, add a sound and post. Then mark it as posted.") : null,
+    status === "held" ? el("div", { class: "muted small" }, j.surface === "trial_reel"
+      ? "Goes out 1–2 hours after the main Reel, once you post the drafts."
+      : "Ready and waiting. Tap Post drafts below, or save the video and post it yourself from the app.") : null,
+    status === "held" && (j.media || []).length && j.media[0].url
+      ? el("a", { href: j.media[0].url, download: "", class: "jlink" }, "Save video ↓") : null);
   const actions = el("div", { class: "jactions" });
   const act = (label, fn, cls = "link") => actions.append(el("button", { class: cls, onclick: fn }, label));
   if (status === "pending") act("Cancel", () => jobAction(j.id, "cancel"));
+  if (status === "held") act("Discard draft", () => jobAction(j.id, "cancel"));
   if (["failed", "skipped", "pending"].includes(status)) act(status === "pending" ? "Post now" : "Retry", () => jobAction(j.id, "retry"));
-  if (["handoff", "draft", "failed", "submitted"].includes(status)) act("Mark as posted", () => openForm(row, "posted", j));
+  if (["handoff", "draft", "failed", "submitted", "held"].includes(status)) act("Mark as posted", () => openForm(row, "posted", j));
   if (!j.auto_stats && ["published", "handoff", "draft", "submitted", "scheduled_past"].includes(status)) act("Enter numbers", () => openForm(row, "numbers", j));
   if (actions.childElementCount) row.append(actions);
   return row;
@@ -612,6 +630,26 @@ async function runRefresh(url, body = {}) {
     }
   } catch (err) { toast(err.message); return null; }
 }
+async function publishDrafts(p) {
+  const n = p.drafts;
+  if (!confirm(`Post ${n} draft${n === 1 ? "" : "s"} now?\n\nThey go live on each platform straight away. A Trial Reel follows 1–2 hours later.`)) return;
+  toast("Posting your drafts…");
+  try {
+    const { task_id } = await api(`/api/posts/${p.post_id}/publish`, { json: {} });
+    for (;;) {
+      const task = await api(`/api/tasks/${task_id}`);
+      if (task.state === "error") throw new Error(task.error);
+      if (task.state === "done") {
+        const failed = task.result.results.filter((r) => r.status === "failed");
+        toast(failed.length ? `${failed.length} failed: ${failed[0].label}: ${failed[0].error}` : "Drafts posted");
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  } catch (err) { toast(err.message); }
+  loadPosts();
+}
+
 async function refreshNumbers(postId) { await runRefresh(`/api/posts/${postId}/refresh`); loadPosts(); }
 
 async function postAgain(postId) {

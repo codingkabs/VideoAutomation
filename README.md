@@ -21,7 +21,7 @@ The research behind it covers about 50 platforms:
 4. [Run it 24/7 with Docker](#run-it-247-with-docker)
 5. [Setup, step by step](#setup-step-by-step)
 6. [Using it](#using-it)
-7. [My posts and Stats](#my-posts-and-stats)
+7. [My posts and Stats](#my-posts-and-stats) · [Drafts](#drafts)
 8. [Trial Reels](#trial-reels)
 9. [Scheduling and best times](#scheduling-and-best-times)
 10. [Subtitles and music](#subtitles-and-music)
@@ -271,6 +271,7 @@ vauto post clip.mp4 -c "..." --subtitles auto                                   
 vauto post clip.mp4 -c "..." -p instagram,tiktok,x --caption-for x="short one"   # pick platforms
 vauto post 1.jpg 2.jpg 3.jpg -c "Which one? #autumn" --audio track.mp3           # photos
 vauto post clip.mp4 -c "..." --rewrite-captions                                  # Claude tailors captions
+vauto post clip.mp4 -c "..." --drafts                                            # save as drafts, post later
 ```
 
 | Command | What it does |
@@ -280,6 +281,7 @@ vauto post clip.mp4 -c "..." --rewrite-captions                                 
 | `vauto platforms tiktok` | How one platform works, when to post, and what vauto needs |
 | `vauto posts [ID] [--search text] [--show attention]` | Your post history with links and numbers |
 | `vauto posts --mark-posted JOB --url LINK` | Record a phone hand-off you posted yourself |
+| `vauto posts --publish POST_ID` | Post the drafts vauto is holding for that post |
 | `vauto stats [--days 30] [--refresh]` | Views, likes, best platform, best hours and hashtags |
 | `vauto export posts.csv` | Everything as a spreadsheet |
 | `vauto clean [--dry-run]` | Delete old rendered videos to free disk space |
@@ -317,6 +319,20 @@ Phone hand-offs, browser uploads, Telegram and TikTok drafts can't report number
 **Daily limits.** vauto counts your recent posts and warns in the preview when you are close to a platform's cap (Instagram 100, Facebook Reels 30, TikTok about 15, Threads 250 a day).
 
 **Your best times.** Once 3 or more posts have numbers, Stats shows which hours and hashtags do best for *you*. Trust that over any general advice, including [the guide](docs/platform-guide.md).
+
+---
+
+## Drafts
+
+Tick **Save as drafts** on the Post screen (or `--drafts`, or the 📝 button in the Telegram bot) to prepare everything without publishing:
+
+| Platform | What happens |
+|---|---|
+| TikTok | Goes to your TikTok drafts (inbox). Add a sound and post it in TikTok |
+| YouTube | Uploaded as **Private**. Set it to Public in the YouTube app when you're ready |
+| Instagram, Facebook, LinkedIn and others | These platforms don't let any app save drafts, so vauto keeps them ready in **My posts**. Tap **Post drafts** to publish them all, or **Save video** to post one yourself from the app |
+
+A Trial Reel in a draft post goes out 1–2 hours after you post the drafts. A scheduled time is ignored for drafts; you choose when by posting them. `VAUTO_DRAFTS_DEFAULT=true` ticks the box for every post. Drafts keep their videos until you post or discard them, however old they get.
 
 ---
 

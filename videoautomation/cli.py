@@ -91,6 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
     extra = post.add_argument_group("extras")
     extra.add_argument("--tiktok-draft", action="store_true",
                        help="send to TikTok drafts so you can add a trending sound in the app")
+    extra.add_argument("--drafts", dest="drafts", action="store_true", default=None,
+                       help="save as drafts instead of publishing: TikTok drafts, YouTube private, "
+                            "the rest held in vauto until `vauto posts --publish ID`")
+    extra.add_argument("--no-drafts", dest="drafts", action="store_false", help="publish (overrides VAUTO_DRAFTS_DEFAULT)")
     extra.add_argument("--ig-story", action="store_true", help="also post the video as an Instagram Story")
     extra.add_argument("--dry-run", action="store_true", help="render media and show the plan without posting")
     extra.add_argument("--force", action="store_true", help="post again even if this exact post was already sent")
@@ -117,6 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     posts.add_argument("--mark-posted", metavar="JOB_ID",
                        help="you finished a hand-off/browser post yourself: record it as live")
     posts.add_argument("--url", help="the post's link, with --mark-posted")
+    posts.add_argument("--publish", metavar="POST_ID", help="post the drafts vauto is holding for this post")
     posts.add_argument("--json", action="store_true")
 
     stats = sub.add_parser("stats", help="views, likes and what works best, across platforms")
@@ -217,7 +222,8 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
         variant=VariantOptions(mode=args.trial_mode, zoom=args.trial_zoom, mirror=args.trial_mirror,
                                speed=args.trial_speed, hook_text=args.trial_hook,
                                hook_seconds=args.trial_hook_seconds, font_path=settings.font_path),
-        tiktok_draft=args.tiktok_draft, ig_story=args.ig_story, fit=args.fit, allow_trim=args.trim,
+        tiktok_draft=args.tiktok_draft, drafts=args.drafts, ig_story=args.ig_story, fit=args.fit,
+        allow_trim=args.trim,
         audio=args.audio, slide_seconds=args.slide_seconds, cover_ms=args.cover_ms, audio_name=args.audio_name,
         subtitles=args.subtitles, subtitle_style=args.subtitle_style,
         rewrite_captions=args.rewrite_captions, dry_run=args.dry_run, force=args.force, progress=progress,
@@ -328,6 +334,14 @@ def cmd_posts(args: argparse.Namespace, settings: Settings) -> int:
     tracker = Tracker.open(settings)
     tz = zone(settings)
     colour = use_colour()
+    if args.publish:
+        matches = [p for p in tracker.posts(settings, limit=100000)["posts"] if p["post_id"].startswith(args.publish)]
+        if len(matches) != 1:
+            raise VautoError(f"No single post starting with {args.publish!r}")
+        results = service.publish_drafts(settings, matches[0]["post_id"])
+        print(format_results(results, colour=colour, tz=tz))
+        service.notify_results(settings, results, f"vauto drafts posted {matches[0]['post_id']}")
+        return 1 if any(r.status == "failed" for r in results) else 0
     if args.mark_posted:
         result = tracker.mark_posted(args.mark_posted, args.url)
         print(f"Marked {label_for(result.platform, result.surface)} as posted" + (f": {result.url}" if result.url else ""))

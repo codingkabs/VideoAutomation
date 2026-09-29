@@ -99,7 +99,7 @@ class JobStore:
         sql = "SELECT * FROM jobs"
         where, args = [], []
         if not include_done:
-            where.append("status IN ('pending', 'running')")
+            where.append("status IN ('pending', 'running', 'held')")
         if post_id:
             where.append("post_id = ?")
             args.append(post_id)
@@ -134,6 +134,14 @@ class JobStore:
         self.conn.execute(
             "UPDATE jobs SET status = ?, result = ?, updated_at = ? WHERE idem_key = ?",
             (result.status, json.dumps(result.to_dict()), iso(utcnow()), idem_key),
+        )
+
+    def requeue(self, job: PostJob, status: str) -> None:
+        """Save an edited job (new time, options) with a new status, clearing any old result."""
+        self.conn.execute(
+            "UPDATE jobs SET payload = ?, run_at = ?, status = ?, result = NULL, not_before = NULL, updated_at = ?"
+            " WHERE idem_key = ?",
+            (json.dumps(job.to_dict()), job.run_at or iso(utcnow()), status, iso(utcnow()), job.idem_key),
         )
 
     def bump_attempts(self, idem_key: str) -> None:
@@ -191,7 +199,7 @@ def run_job(
                                 error="skipped because the main post did not publish")
             store.finish(job.idem_key, result)
             return result
-        if parent.status in ("pending", "running"):
+        if parent.status in ("pending", "running", "held"):
             store.defer(job.idem_key, 300)
             return PostResult(job.platform, job.surface, "queued", run_at=job.run_at,
                               notes=["waiting for the main post to publish"])

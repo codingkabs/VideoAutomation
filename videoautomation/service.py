@@ -48,6 +48,8 @@ def make_request(settings: Settings, inputs: list[Path], caption: str, platforms
     variant = opts.pop("variant", None) or VariantOptions(font_path=settings.font_path)
     if opts.get("trial") is None:
         opts["trial"] = settings.trial_default
+    if opts.get("drafts") is None:
+        opts["drafts"] = settings.drafts_default
     if opts.get("trial_delay") is None:
         opts["trial_delay"] = settings.trial_delay_minutes
     if not opts.get("trial_graduation"):
@@ -80,9 +82,10 @@ def publisher_factory(settings: Settings):
 def cancel(settings: Settings, key_prefix: str) -> PostResult:
     store = JobStore(settings.db_path)
     row = find(store, key_prefix)
-    if row.status != "pending":
-        raise VautoError(f"Only queued jobs can be cancelled; this one is {row.status}")
-    result = PostResult(row.job.platform, row.job.surface, "skipped", error="cancelled by you")
+    if row.status not in ("pending", "held"):
+        raise VautoError(f"Only queued jobs and drafts can be cancelled; this one is {row.status}")
+    reason = "draft discarded by you" if row.status == "held" else "cancelled by you"
+    result = PostResult(row.job.platform, row.job.surface, "skipped", error=reason)
     store.finish(row.idem_key, result)
     return result
 
@@ -90,14 +93,58 @@ def cancel(settings: Settings, key_prefix: str) -> PostResult:
 def retry(settings: Settings, key_prefix: str) -> PostResult:
     store = JobStore(settings.db_path)
     row = find(store, key_prefix)
-    if row.status not in ("failed", "skipped", "pending"):
-        raise VautoError(f"Only failed, skipped or queued jobs can be retried; this one is {row.status}")
+    if row.status not in ("failed", "skipped", "pending", "held"):
+        raise VautoError(f"Only failed, skipped, queued or draft jobs can be posted again; this one is {row.status}")
     job = row.job
+    if job.depends_on:
+        parent = store.get(job.depends_on)
+        if parent is not None and parent.status == "held":
+            raise VautoError("Post the main Reel first; its Trial Reel follows it")
+    job.options.pop("hold", None)
     job.run_at = iso(utcnow())
     store.replace_pending(job)
     if store.get(job.idem_key) is None:
         store.insert(job, status="running")
     return run_job(store, job, publisher_factory(settings))
+
+
+def publish_drafts(settings: Settings, post_id: str) -> list[PostResult]:
+    """Post a post's drafts that vauto is holding. Main posts go out now; a Trial Reel is
+    scheduled 1-2 hours later and its results check after that (the worker runs both)."""
+    import random
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import timedelta
+
+    store = JobStore(settings.db_path)
+    rows = [r for r in store.rows(post_id=post_id, limit=1000) if r.status == "held"]
+    if not rows:
+        raise VautoError("This post has no drafts waiting")
+    now = utcnow()
+    mains = [r.job for r in rows if not r.job.depends_on]
+    followers = sorted((r.job for r in rows if r.job.depends_on), key=lambda j: j.surface == "trial_report")
+    for job in mains:
+        job.options.pop("hold", None)
+        job.run_at = iso(now)
+        store.requeue(job, "running")
+    publisher_for = publisher_factory(settings)
+    with ThreadPoolExecutor(max_workers=max(1, min(6, len(mains)))) as pool:
+        results = list(pool.map(lambda j: run_job(store, j, publisher_for), mains))
+
+    lo, hi = settings.trial_delay_minutes
+    followed_at: dict[str, datetime] = {}
+    for job in followers:
+        job.options.pop("hold", None)
+        if job.surface == "trial_report":
+            when = followed_at.get(job.depends_on or "", now) + timedelta(hours=settings.trial_report_hours)
+        else:
+            when = now + timedelta(minutes=random.randint(lo, hi))
+            followed_at[job.idem_key] = when
+        job.run_at = iso(when)
+        store.requeue(job, "pending")
+        if job.surface != "trial_report":
+            results.append(PostResult(job.platform, job.surface, "queued", run_at=job.run_at,
+                                      notes=["posts after the main Reel; the worker sends it"]))
+    return results
 
 
 def find(store: JobStore, key_prefix: str):

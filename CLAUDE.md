@@ -15,6 +15,7 @@ Flags worth knowing:
 - `-p instagram,tiktok,x` picks platforms (default: VAUTO_PLATFORMS). `vauto platforms` lists them all.
 - `--trial` adds the delayed, zoomed Instagram Trial Reel; `--trial-hook "text"` adds hook text.
 - `--tiktok-draft` sends TikTok to drafts so the user can add a trending sound.
+- `--drafts` publishes nothing: TikTok drafts, YouTube private, everything else held in vauto until `vauto posts --publish POST_ID`.
 - `--at best|18:30|tomorrow 9am|+2h` schedules the post.
 - `--subtitles auto` or `--subtitles file.srt` burns in captions.
 - `--trim` cuts videos to each platform's maximum length instead of skipping that platform.

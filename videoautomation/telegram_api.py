@@ -117,7 +117,7 @@ class TelegramAPI:
             raise PublishError("Telegram did not return a download path (file too large for the Bot API?)")
         dest.parent.mkdir(parents=True, exist_ok=True)
         file_path = info["file_path"]
-        if file_path.startswith("/"):
+        if file_path.startswith("/") or Path(file_path).is_absolute():
             # A local Bot API server (--local) returns a path on its own disk.
             source = Path(file_path)
             if not source.is_file():

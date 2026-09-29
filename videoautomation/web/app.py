@@ -171,7 +171,7 @@ def create_app(settings: Settings):
         return jsonify({
             "platforms": platform_rows(),
             "defaults": {
-                "trial": s.trial_default, "trial_delay": list(s.trial_delay_minutes),
+                "trial": s.trial_default, "drafts": s.drafts_default, "trial_delay": list(s.trial_delay_minutes),
                 "graduation": s.trial_graduation, "timezone": s.timezone, "subtitle_style": s.subtitle_style,
                 "best_time": best, "claude": bool(s.anthropic_api_key),
             },
@@ -297,6 +297,7 @@ def create_app(settings: Settings):
                                    mirror=bool(o.get("trial_mirror")), speed=float(o.get("trial_speed") or 1.0),
                                    hook_text=o.get("trial_hook") or None, font_path=s.font_path),
             tiktok_draft=bool(o.get("tiktok_draft")), ig_story=bool(o.get("ig_story")),
+            drafts=bool(o.get("drafts")),
             fit=o.get("fit") or "auto", allow_trim=bool(o.get("trim")),
             subtitles=subtitles, subtitle_style=o.get("subtitle_style") or None,
             rewrite_captions=bool(o.get("rewrite")), dry_run=dry_run, force=bool(o.get("force")),
@@ -389,6 +390,9 @@ def create_app(settings: Settings):
         out = dict(p)
         out["thumb"] = media_url(p["thumb"]) if p.get("thumb") else None
         out.pop("inputs", None)  # local file paths stay on this computer
+        out["jobs"] = [{**j, "media": [{"kind": m["kind"], "url": media_url(m["path"])}
+                                       for m in j.get("media", []) if Path(m["path"]).is_file()]}
+                       for j in p["jobs"]]
         return out
 
     @app.get("/api/posts")
@@ -426,6 +430,18 @@ def create_app(settings: Settings):
 
         days = int((request.get_json() or {}).get("days") or 30)
         return jsonify({"task_id": background("refresh", lambda _p: refresh(cfg(), tracker(), days=days).to_dict())})
+
+    @app.post("/api/posts/<post_id>/publish")
+    def publish_post_drafts(post_id: str):
+        """Post the drafts vauto is holding for this post (runs in the background)."""
+        pid = secure_filename(post_id)
+
+        def work(_progress):
+            results = service.publish_drafts(cfg(), pid)
+            service.notify_results(cfg(), results, f"vauto drafts posted {pid}")
+            return {"results": [{**r.to_dict(), "label": label_for(r.platform, r.surface)} for r in results]}
+
+        return jsonify({"task_id": background("publish", work)})
 
     @app.post("/api/posts/<post_id>/reuse")
     def reuse_post(post_id: str):

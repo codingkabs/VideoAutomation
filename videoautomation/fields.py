@@ -32,6 +32,8 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("VAUTO_TIMEZONE", "Time zone", "e.g. Europe/London"),
         Field("VAUTO_BEST_TIMES", "Best posting times", "e.g. mon-fri 07:30,12:30,18:00; sat-sun 10:00"),
         Field("VAUTO_TRIAL_DEFAULT", "Trial Reel on by default", kind="bool"),
+        Field("VAUTO_DRAFTS_DEFAULT", "Save as drafts by default",
+              "TikTok to your drafts, YouTube as private, the rest kept in vauto until you post them", kind="bool"),
         Field("VAUTO_TRIAL_DELAY", "Trial Reel delay (minutes)", "e.g. 60-120"),
         Field("VAUTO_TRIAL_GRADUATION", "Trial Reel graduation", "MANUAL keeps it off followers' feeds",
               choices=("MANUAL", "SS_PERFORMANCE"), kind="select"),

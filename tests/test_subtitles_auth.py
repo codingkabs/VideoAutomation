@@ -1,3 +1,4 @@
+import os
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -90,7 +91,8 @@ def test_token_store_is_private(settings):
     store.set("x", a=1)
     store.set("x", b=2)
     assert store.get("x") == {"a": 1, "b": 2}
-    assert oct(settings.tokens_path.stat().st_mode)[-3:] == "600"
+    if os.name != "nt":  # Windows has no Unix file modes; the file sits in the user's own profile
+        assert oct(settings.tokens_path.stat().st_mode)[-3:] == "600"
 
 
 def test_instagram_login_token_refreshes_when_old(settings):

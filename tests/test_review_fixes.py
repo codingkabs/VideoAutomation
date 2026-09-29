@@ -40,7 +40,7 @@ def _has_encoder(name: str) -> bool:
 def test_iphone_hdr_video_is_tone_mapped_to_standard_colour(tmp_path):
     src = tmp_path / "hdr.mov"
     _ffmpeg("-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30", "-t", "1", "-c:v", "libx265",
-            "-x265-params", "log-level=error", "-pix_fmt", "yuv420p10le", "-color_primaries", "bt2020",
+            "-x265-params", "log-level=error:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc", "-pix_fmt", "yuv420p10le", "-color_primaries", "bt2020",
             "-color_trc", "arib-std-b67", "-colorspace", "bt2020nc", str(src))
     info = probe(src)
     assert info.is_hdr and info.color_transfer == "arib-std-b67"
@@ -203,7 +203,7 @@ def test_plan_mentions_hdr_conversion(settings, tmp_path):
 
     src = tmp_path / "hdr.mov"
     _ffmpeg("-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30", "-t", "3", "-c:v", "libx265",
-            "-x265-params", "log-level=error", "-pix_fmt", "yuv420p10le", "-color_trc", "arib-std-b67",
+            "-x265-params", "log-level=error:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc", "-pix_fmt", "yuv420p10le", "-color_trc", "arib-std-b67",
             "-color_primaries", "bt2020", "-colorspace", "bt2020nc", str(src))
     req = service.make_request(settings, [src], "hdr test", ["instagram"], dry_run=True)
     plan, _ = service.post(settings, req)

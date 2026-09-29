@@ -40,6 +40,7 @@ class ChatSession:
     caption: str | None = None
     trial: bool = False
     tiktok_draft: bool = False
+    drafts: bool = False
     best_time: bool = False
     subtitles: bool = False
     panel_id: int | None = None
@@ -195,7 +196,8 @@ class Bot:
     def start_session(self, chat_id: int, messages: list[dict[str, Any]]) -> None:
         files = [self._download(chat_id, self.media_of(m), i) for i, m in enumerate(messages)]
         caption = next((m.get("caption") for m in messages if m.get("caption")), None)
-        self.sessions[chat_id] = ChatSession(files=files, caption=caption, trial=self.settings.trial_default)
+        self.sessions[chat_id] = ChatSession(files=files, caption=caption, trial=self.settings.trial_default,
+                                             drafts=self.settings.drafts_default)
         if caption is None:
             self.api.send_message(chat_id, f"Got {len(files)} file(s). Now send the caption (or /skip for none).")
         else:
@@ -213,7 +215,8 @@ class Bot:
             f"<b>Caption:</b>\n{caption}",
             "",
             f"🧪 Trial Reel: {'on' if session.trial else 'off'}",
-            f"🎵 TikTok: {'send to drafts' if session.tiktok_draft else 'publish'}",
+            f"📝 Save as drafts: {'on (nothing is published yet)' if session.drafts else 'off'}",
+            f"🎵 TikTok: {'send to drafts' if session.tiktok_draft or session.drafts else 'publish'}",
             f"⏰ When: {'next best time' if session.best_time else 'now'}",
             f"💬 Subtitles: {'auto' if session.subtitles else 'off'}",
         ]
@@ -224,7 +227,9 @@ class Bot:
              {"text": f"🎵 Drafts {'✓' if session.tiktok_draft else '✗'}", "callback_data": "draft"}],
             [{"text": "⏰ Best time" if not session.best_time else "⏰ Now", "callback_data": "when"},
              {"text": f"💬 Subs {'✓' if session.subtitles else '✗'}", "callback_data": "subs"}],
-            [{"text": "👀 Preview", "callback_data": "preview"}, {"text": "🚀 Post", "callback_data": "post"}],
+            [{"text": f"📝 Drafts {'✓' if session.drafts else '✗'}", "callback_data": "drafts"}],
+            [{"text": "👀 Preview", "callback_data": "preview"},
+             {"text": "💾 Save drafts" if session.drafts else "🚀 Post", "callback_data": "post"}],
             [{"text": "✖ Cancel", "callback_data": "cancel"}],
         ]}
         return "\n".join(lines), keyboard
@@ -253,8 +258,9 @@ class Bot:
             self.sessions.pop(chat_id, None)
             self.api.edit_message(chat_id, query["message"]["message_id"], "Dropped. Nothing was posted.")
             return
-        if action in ("trial", "draft", "when", "subs"):
-            attr = {"trial": "trial", "draft": "tiktok_draft", "when": "best_time", "subs": "subtitles"}[action]
+        if action in ("trial", "draft", "when", "subs", "drafts"):
+            attr = {"trial": "trial", "draft": "tiktok_draft", "when": "best_time", "subs": "subtitles",
+                    "drafts": "drafts"}[action]
             setattr(session, attr, not getattr(session, attr))
             session.preview = ""
             self.show_panel(chat_id)
@@ -270,7 +276,7 @@ class Bot:
         publish_at, note = service.resolve_publish_at(self.settings, "best" if session.best_time else None,
                                                       self.settings.default_platforms)
         req = service.make_request(self.settings, session.files, session.caption or "", None,
-                                   trial=session.trial, tiktok_draft=session.tiktok_draft,
+                                   trial=session.trial, tiktok_draft=session.tiktok_draft, drafts=session.drafts,
                                    subtitles="auto" if session.subtitles else None,
                                    publish_at=publish_at, dry_run=dry_run)
         return req, note

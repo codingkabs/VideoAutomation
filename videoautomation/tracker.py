@@ -290,6 +290,7 @@ class Tracker:
                 "backend": r.job.backend, "status": status, "run_at": r.run_at,
                 "url": res.url if res else None, "error": res.error if res else None,
                 "notes": res.notes if res else [], "caption": r.job.caption,
+                "media": [{"kind": m.kind, "path": m.path} for m in r.job.media],
                 "metrics": metrics, "stats_at": stats["at"] if stats else None,
                 "stats_source": stats["source"] if stats else None,
                 "auto_stats": bool(settings and res and status == "published"
@@ -305,7 +306,7 @@ class Tracker:
             state = "upcoming"
         elif statuses & LIVE or "scheduled_past" in statuses:
             state = "posted"
-        elif statuses & {"draft", "handoff", "submitted"}:
+        elif statuses & {"draft", "handoff", "submitted", "held"}:
             state = "waiting"
         elif statuses == {"skipped"} and not rejected:
             state = "cancelled"
@@ -313,7 +314,7 @@ class Tracker:
             state = "failed"
         else:
             state = "posted"
-        needs_you = bool(statuses & {"failed", "handoff", "draft"} or rejected)
+        needs_you = bool(statuses & {"failed", "handoff", "draft", "held"} or rejected)
         caption = post.get("caption") or (main[0]["caption"] if main else "")
         posted_at = min((j["run_at"] for j in main), default=post.get("created_at"))
         thumb = post.get("thumb")
@@ -325,6 +326,7 @@ class Tracker:
             "inputs": json.loads(post.get("inputs") or "[]"),
             "jobs": jobs, "rejected": rejected, "state": state, "needs_you": needs_you,
             "totals": {k: totals.get(k, 0.0) for k in METRICS},
+            "drafts": sum(1 for j in jobs if j["status"] == "held"),
             "upcoming": sorted((j for j in jobs if j["status"] in ("pending", "scheduled")), key=lambda j: j["run_at"]),
         }
 

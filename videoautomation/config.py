@@ -196,6 +196,7 @@ class Settings:
     stats_refresh_hours: int = 6
     digest: str = "weekly"  # weekly | daily | off
     keep_files_days: int = 14  # delete rendered videos and uploads older than this (0 = keep)
+    drafts_default: bool = False  # "Save as drafts" ticked by default
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None, dotenv: Path | None = None) -> "Settings":
@@ -322,6 +323,7 @@ class Settings:
             stats_refresh_hours=max(0, stats_hours),
             digest=digest,
             keep_files_days=max(0, keep_days),
+            drafts_default=_bool(g("VAUTO_DRAFTS_DEFAULT")),
         )
 
     def trial_backend_for(self) -> str:

@@ -20,15 +20,19 @@ from .media.photos import make_slideshow, normalize_image
 from .media.renditions import make_rendition, plan_rendition
 from .media.subtitles import Cue, burn_subtitles, cues_for
 from .media.variants import VariantOptions, render_variant
-from .models import MediaFile, MediaInfo, PostJob, PostResult
+from .models import MediaFile, MediaInfo, PostJob, PostResult, label_for
 from .publishers import make_publisher
 from .scheduler import JobStore, iso, parse_iso, run_job, utcnow
 from .storage import Storage, make_storage
 
-ACTIVE_STATUSES = {"published", "scheduled", "draft", "submitted", "pending", "running", "handoff", "reported"}
+ACTIVE_STATUSES = {"published", "scheduled", "draft", "submitted", "pending", "running", "handoff", "reported",
+                   "held"}
 PARENT_OK = {"published", "submitted", "scheduled", "draft", "handoff"}
 IG_STORY_VIDEO = {"min_s": 3, "max_s": 60, "max_mb": 100}
 PHOTO_SLIDESHOW_MIN_S = 6.0
+# Platforms whose own apps can hold a draft made by vauto, per posting route.
+NATIVE_DRAFTS = {"tiktok": ("zernio", "tiktok"), "youtube": ("zernio",)}
+HELD_NOTE = "saved as a draft in vauto: open My posts and tap Post drafts when you're ready"
 
 Progress = Callable[[str], None]
 
@@ -51,6 +55,7 @@ class PostRequest:
     trial_report: bool = True
     variant: VariantOptions = field(default_factory=VariantOptions)
     tiktok_draft: bool = False
+    drafts: bool = False  # save everywhere as drafts instead of publishing
     ig_story: bool = False
     fit: str = "auto"
     allow_trim: bool = False
@@ -182,6 +187,9 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
             raise VautoError(f"{p} has no posting route yet (see `vauto platforms`)")
     if req.publish_at and parse_iso(req.publish_at) <= utcnow():
         raise VautoError("The scheduled time is in the past")
+    schedule_dropped = bool(req.drafts and req.publish_at)
+    if schedule_dropped:
+        req.publish_at = None  # drafts are saved now; the time is picked when you post them
 
     req.progress("Reading media")
     infos = [probe(p) for p in req.inputs]
@@ -225,9 +233,38 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
         _plan_video(req, settings, infos[0], work, texts, plan, add_job, reject)
     else:
         _plan_photos(req, settings, images, work, texts, plan, add_job, reject)
+    if req.drafts:
+        _apply_drafts(plan)
+        if schedule_dropped:
+            plan.notes.insert(0, "drafts are saved now, so the scheduled time was ignored")
     plan.notes.extend(_limit_notes(settings, sorted({j.platform for j in plan.jobs}), req.publish_at))
     plan.notes = list(dict.fromkeys(plan.notes))
     return plan
+
+
+def _apply_drafts(plan: PostPlan) -> None:
+    """Draft instead of publish: in the platform's own drafts where it allows that
+    (TikTok inbox, YouTube private), otherwise kept in vauto until you post them."""
+    native: list[str] = []
+    held: list[str] = []
+    for job in plan.jobs:
+        name = platform_spec(job.platform)["name"]
+        if job.backend == "handoff":
+            continue  # hand-offs are posted by you anyway
+        if job.backend in NATIVE_DRAFTS.get(job.platform, ()):
+            job.options["draft"] = True
+            if job.platform == "youtube":
+                job.options["visibility"] = "private"
+                native.append(f"{name} uploaded as Private")
+            else:
+                native.append(f"{name} to your {name} drafts")
+        else:
+            job.options["hold"] = True
+            if job.surface != "trial_report":
+                held.append(label_for(job.platform, job.surface).replace(job.platform, name, 1))
+    parts = native + ([f"{', '.join(held)} kept in vauto until you tap Post drafts in My posts"] if held else [])
+    if parts:
+        plan.notes.insert(0, "drafts: " + "; ".join(parts))
 
 
 def _limit_notes(settings: Settings, platforms: list[str], publish_at: str | None) -> list[str]:
@@ -441,6 +478,16 @@ def execute(plan: PostPlan, settings: Settings, req: PostRequest) -> list[PostRe
             continue
         if existing:
             store.replace_pending(job)
+        if job.options.get("hold") and not req.dry_run:
+            if store.get(job.idem_key) is None:
+                store.insert(job, status="held")
+            else:
+                store.requeue(job, "held")
+            if job.surface != "trial_report":
+                note = (HELD_NOTE if not job.depends_on else
+                        "posts 1-2 hours after the main Reel once you post the drafts")
+                results.append(PostResult(job.platform, job.surface, "held", notes=[note]))
+            continue
         due = job.run_at is None or parse_iso(job.run_at) <= utcnow()
         (now_jobs if due else later_jobs).append(job)
 

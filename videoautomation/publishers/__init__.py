@@ -41,7 +41,7 @@ class DryRunPublisher(Publisher):
         notes = [f"backend={job.backend}"]
         if media:
             notes += [f"media={media}", f"caption={len(job.caption)} chars"]
-        for key in ("title", "trial_graduation", "draft", "thumb_offset_ms", "content_type", "tags",
+        for key in ("title", "trial_graduation", "draft", "hold", "thumb_offset_ms", "content_type", "tags",
                     "subreddit", "board_id"):
             if job.options.get(key) not in (None, False, [], ""):
                 notes.append(f"{key}={job.options[key]}")

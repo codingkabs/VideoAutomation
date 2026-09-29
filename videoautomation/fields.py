@@ -51,8 +51,8 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         *_zernio_accounts(),
     )),
     ("meta", "Instagram and Facebook (direct)", (
-        Field("VAUTO_BACKEND_INSTAGRAM", "Instagram route", choices=("meta", "zernio", "handoff"), kind="select"),
-        Field("VAUTO_BACKEND_FACEBOOK", "Facebook route", choices=("meta", "zernio", "handoff"), kind="select"),
+        Field("VAUTO_BACKEND_INSTAGRAM", "Instagram route", "default: Meta direct if set up, otherwise Zernio", choices=("meta", "zernio", "handoff"), kind="select"),
+        Field("VAUTO_BACKEND_FACEBOOK", "Facebook route", "default: Meta direct if set up, otherwise Zernio", choices=("meta", "zernio", "handoff"), kind="select"),
         Field("META_GRAPH_HOST", "Graph host", "graph.facebook.com (Facebook Login) or graph.instagram.com",
               choices=("graph.facebook.com", "graph.instagram.com"), kind="select"),
         Field("META_APP_ID", "Meta app id", "only needed for `vauto auth meta` token exchange"),

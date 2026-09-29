@@ -239,3 +239,15 @@ def test_phone_address_behind_a_proxy_is_not_treated_as_cross_site(settings, tmp
     evil = client.post("/api/snippets", json={"name": "e", "text": "f"},
                        headers={**auth, "Origin": "https://evil.example"}, base_url="http://127.0.0.1:8765")
     assert evil.status_code == 403
+
+
+def test_env_example_copy_uses_zernio_for_instagram_and_facebook(tmp_path):
+    """A fresh `copy .env.example .env` plus Zernio accounts must route Instagram and Facebook to Zernio."""
+    from pathlib import Path
+
+    env = tmp_path / ".env"
+    example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
+    env.write_text(example + "\nZERNIO_API_KEY=k\nZERNIO_ACCOUNT_INSTAGRAM=a\nZERNIO_ACCOUNT_FACEBOOK=b\n",
+                   encoding="utf-8")
+    s = Settings.from_env(env={"VAUTO_HOME": str(tmp_path / "home")}, dotenv=env)
+    assert s.backends["instagram"] == "zernio" and s.backends["facebook"] == "zernio"

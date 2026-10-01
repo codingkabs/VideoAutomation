@@ -29,6 +29,10 @@ async function api(path, options = {}) {
     init.body = JSON.stringify(options.json);
   }
   const resp = await fetch(path, init);
+  if (resp.status === 401) {  // signed out (e.g. the password changed): go to the sign-in page
+    location.href = "/login?next=" + encodeURIComponent(location.pathname + location.search + location.hash);
+    throw new Error("Please sign in again");
+  }
   let data = null;
   try { data = await resp.json(); } catch { /* not json */ }
   if (!resp.ok) throw new Error((data && data.error) || `Request failed (${resp.status})`);

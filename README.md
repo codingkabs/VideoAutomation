@@ -88,7 +88,7 @@ Your phone only sends the video; the work happens on a computer (or small server
 
 **1. Keep vauto running somewhere.** A home computer that stays on, a Mac mini, or a small cloud server (about £4 a month) all work. The easiest way is Docker: see [Run it 24/7 with Docker](#run-it-247-with-docker).
 
-**2. Set a password.** Set `VAUTO_WEB_PASSWORD` in `.env` (or in the Setup tab). vauto refuses to open to other devices without one.
+**2. Set a password.** Set `VAUTO_WEB_PASSWORD` in `.env` (or in the Setup tab). vauto refuses to open to other devices without one. The app then shows its own sign-in page and remembers each device for about a year, including home-screen apps on iPhone, which can't show the browser's password pop-up. Changing the password signs every device out; `/logout` signs out one. The iPhone Shortcut and scripts send the password in an `Authorization: Basic` header instead.
 
 **3. Give it a secure address your phone can reach.** Phones only install web apps and accept shares over https. The simplest free option is [Tailscale](https://tailscale.com):
 

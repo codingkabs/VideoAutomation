@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · vauto</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#5b5bd6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="vauto">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .login { max-width: 380px; margin: 14vh auto 0; padding: 0 16px; }
+    .login .card { padding: 1.5rem 1.3rem; }
+    .login h1 { display: flex; align-items: center; gap: .6rem; font-size: 1.4rem; margin: 0 0 1.1rem; }
+    .login form { display: grid; gap: .7rem; }
+    .login .err { color: var(--bad); font-size: .9rem; min-height: 1.2em; }
+    .login .primary { width: 100%; }
+  </style>
+</head>
+<body>
+  <main class="login">
+    <div class="card">
+      <h1><span class="logo" aria-hidden="true">▶</span> vauto</h1>
+      <form method="post" action="/login">
+        <input type="hidden" name="next" value="{{next}}">
+        <input type="text" name="username" value="vauto" autocomplete="username" hidden>
+        <label for="password" class="small">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+        <div class="err" role="alert">{{error}}</div>
+        <button class="primary" type="submit">Sign in</button>
+        <p class="muted small">You stay signed in on this device.</p>
+      </form>
+    </div>
+  </main>
+</body>
+</html>

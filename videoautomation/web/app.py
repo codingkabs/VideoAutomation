@@ -33,6 +33,9 @@ STATIC = Path(__file__).parent / "static"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 TASK_TTL = 6 * 3600
 JSON_EXEMPT = ("/api/upload", "/api/subtitles")  # file uploads; every other API write must be JSON
+AUTH_COOKIE = "vauto_auth"
+AUTH_DAYS = 400  # browsers cap cookie lifetimes at 400 days
+PUBLIC_PATHS = ("/login", "/logout", "/manifest.webmanifest", "/sw.js")  # no data: the sign-in page and app shell
 
 
 def create_app(settings: Settings):
@@ -66,6 +69,34 @@ def create_app(settings: Settings):
             hosts.add(public.split("://", 1)[-1].split("/", 1)[0])
         return hosts
 
+    def auth_secret() -> bytes:
+        """A random key kept in VAUTO_HOME that signs the "stay signed in" cookie."""
+        if "auth_secret" not in state:
+            path = cfg().home / "web_secret"
+            if not path.is_file():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(secrets.token_hex(32), encoding="utf-8")
+                try:
+                    os.chmod(path, 0o600)
+                except OSError:
+                    pass
+            state["auth_secret"] = path.read_text(encoding="utf-8").strip().encode()
+        return state["auth_secret"]
+
+    def auth_token(password: str) -> str:
+        # Tied to the password, so changing it signs every device out.
+        return hmac.new(auth_secret(), password.encode("utf-8"), "sha256").hexdigest()
+
+    def signed_in(password: str) -> bool:
+        cookie = request.cookies.get(AUTH_COOKIE, "")
+        return bool(cookie) and hmac.compare_digest(cookie, auth_token(password))
+
+    def safe_next(target: str | None) -> str:
+        target = (target or "/").strip()
+        if not target.startswith("/") or target.startswith("//") or "\\" in target:
+            return "/"  # only paths on this app, never another site
+        return target
+
     @app.before_request
     def guard():
         password = cfg().web_password
@@ -84,10 +115,17 @@ def create_app(settings: Settings):
                 return Response("Expected JSON", 415)
         if not password:
             return None
-        auth = request.authorization
+        if request.path in PUBLIC_PATHS or request.path.startswith("/static/") or signed_in(password):
+            return None
+        auth = request.authorization  # the iPhone Shortcut and scripts send the password this way
         if auth and auth.password and hmac.compare_digest(auth.password, password):
             return None
-        return Response("Password required", 401, {"WWW-Authenticate": 'Basic realm="vauto"'})
+        if request.method == "GET" and not request.path.startswith(("/api/", "/media/", "/uploads/")):
+            from urllib.parse import urlencode
+
+            return redirect("/login?" + urlencode({"next": safe_next(request.full_path.rstrip("?"))}))
+        # No WWW-Authenticate header: home-screen apps on iPhone can't show that pop-up anyway.
+        return jsonify({"error": "Please sign in again", "login": True}), 401
 
     @app.after_request
     def headers(resp):
@@ -98,6 +136,38 @@ def create_app(settings: Settings):
     @app.errorhandler(VautoError)
     def vauto_error(exc):
         return jsonify({"error": str(exc)}), 400
+
+    # ---------------------------------------------------------------- sign-in
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        from html import escape
+
+        password = cfg().web_password
+        target = safe_next(request.values.get("next"))
+        if not password:
+            return redirect(target)
+        error = ""
+        if request.method == "POST":
+            given = request.form.get("password", "")
+            if given and hmac.compare_digest(given, password):
+                resp = redirect(target, code=303)
+                secure = request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
+                resp.set_cookie(AUTH_COOKIE, auth_token(password), max_age=AUTH_DAYS * 86400, httponly=True,
+                                secure=secure, samesite="Lax", path="/")
+                return resp
+            time.sleep(0.7)  # slows down password guessing
+            error = "That password isn't right."
+        page = (STATIC / "login.html").read_text(encoding="utf-8")
+        page = page.replace("{{next}}", escape(target, quote=True)).replace("{{error}}", escape(error, quote=False))
+        resp = Response(page, mimetype="text/html")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.get("/logout")
+    def logout():
+        resp = redirect("/login", code=303)
+        resp.delete_cookie(AUTH_COOKIE, path="/")
+        return resp
 
     # ---------------------------------------------------------------- pages
     @app.get("/")

@@ -1,4 +1,4 @@
-﻿"""Every setting vauto reads, grouped for the web settings page."""
+"""Every setting vauto reads, grouped for the web settings page."""
 
 from __future__ import annotations
 

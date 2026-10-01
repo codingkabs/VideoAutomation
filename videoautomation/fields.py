@@ -1,4 +1,4 @@
-"""Every setting vauto reads, grouped for the web settings page."""
+﻿"""Every setting vauto reads, grouped for the web settings page."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("TELEGRAM_BOT_TOKEN", "Bot token", "from @BotFather", secret=True),
         Field("TELEGRAM_OWNER_CHAT_ID", "Your chat id", "where hand-offs and notifications go"),
         Field("TELEGRAM_ALLOWED_USER_IDS", "Allowed user ids", "who may use the bot, comma-separated"),
-        Field("TELEGRAM_CHANNEL_ID", "Channel to post to", "@channelname or -100… id; add the bot as admin"),
+        Field("TELEGRAM_CHANNEL_ID", "Channel to post to", "@channelname or -100â€¦ id; add the bot as admin"),
         Field("TELEGRAM_API_BASE", "Bot API server",
               "for phone videos over 20 MB: http://telegram-bot-api:8081 with the docker bigfiles profile"),
         Field("TELEGRAM_API_ID", "Telegram api_id", "my.telegram.org > API development tools; for the big-files server"),
@@ -116,7 +116,7 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("S3_PUBLIC_BASE_URL", "Public base URL", "optional; otherwise links are presigned"),
     )),
     ("extras", "Extras", (
-        Field("ANTHROPIC_API_KEY", "Anthropic API key", "for Claude caption rewriting", secret=True),
+        Field("ANTHROPIC_API_KEY", "Anthropic API key", "for Claude-written first comments and caption rewriting (console.anthropic.com)", secret=True),
         Field("VAUTO_CAPTION_MODEL", "Caption model", "default claude-opus-5"),
         Field("VAUTO_SUBTITLE_MODEL", "Subtitle model", "faster-whisper size: tiny, base, small, medium"),
         Field("VAUTO_SUBTITLE_STYLE", "Subtitle style", choices=("bold", "clean"), kind="select"),
@@ -139,4 +139,4 @@ ALL_FIELDS: dict[str, Field] = {f.key: f for _, _, fields in GROUPS for f in fie
 def mask(value: str) -> str:
     if not value:
         return ""
-    return "•" * 6 + value[-4:] if len(value) > 8 else "•" * 6
+    return "â€¢" * 6 + value[-4:] if len(value) > 8 else "â€¢" * 6

@@ -290,6 +290,7 @@ class Tracker:
                 "backend": r.job.backend, "status": status, "run_at": r.run_at,
                 "url": res.url if res else None, "error": res.error if res else None,
                 "notes": res.notes if res else [], "caption": r.job.caption,
+                "first_comment": r.job.options.get("first_comment"),
                 "media": [{"kind": m.kind, "path": m.path} for m in r.job.media],
                 "metrics": metrics, "stats_at": stats["at"] if stats else None,
                 "stats_source": stats["source"] if stats else None,

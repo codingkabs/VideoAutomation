@@ -115,6 +115,7 @@ async function loadStatus() {
   const d = state.status.defaults;
   $("#opt-trial").checked = d.trial;
   $("#opt-drafts").checked = !!d.drafts;
+  renderDraftChips();
   $("#opt-comment").value = d.first_comment_mode || "off";
   if (d.first_comment_mode === "mine" && !$("#opt-comment-text").value) $("#opt-comment-text").value = d.first_comment_text || "";
   renderCommentBox();
@@ -158,7 +159,7 @@ function renderPicker() {
       title: `${ROUTES[p.backend] || p.backend}: ${p.detail}`,
       onclick: () => {
         state.selected.has(p.key) ? state.selected.delete(p.key) : state.selected.add(p.key);
-        renderPicker(); renderMeters(); renderOverrides(); updateButtons();
+        renderPicker(); renderMeters(); renderOverrides(); renderDraftChips(); updateButtons();
       },
     }, el("span", { class: "dot" }), p.name)));
     const group = el("details", { class: "pgroup", open: state.openGroups.has(title),
@@ -179,7 +180,7 @@ $$("[data-pick]").forEach((b) => b.addEventListener("click", () => {
   state.selected.clear();
   if (b.dataset.pick === "uk") all.filter((p) => p.tier === 1).forEach((p) => state.selected.add(p.key));
   if (b.dataset.pick === "ready") all.filter((p) => p.ready && p.backend !== "handoff").forEach((p) => state.selected.add(p.key));
-  renderPicker(); renderMeters(); renderOverrides(); updateButtons();
+  renderPicker(); renderMeters(); renderOverrides(); renderDraftChips(); updateButtons();
 }));
 
 // ------------------------------------------------------------------ caption
@@ -301,6 +302,38 @@ $("#subtitle-file").addEventListener("change", async (e) => {
   } catch (err) { toast(err.message); $("#opt-subtitles").value = ""; }
 });
 
+// ------------------------------------------------------------ per-platform drafts
+state.draftPick = null;  // Set of platform keys you chose to draft; null = your default
+function defaultDraftSet() {
+  const d = state.status ? state.status.defaults : {};
+  if (d.draft_platforms && d.draft_platforms.length) return new Set(d.draft_platforms);
+  return new Set(state.status ? state.status.platforms.map((p) => p.key) : []);
+}
+function draftedPlatforms() {
+  const pick = state.draftPick || defaultDraftSet();
+  return [...state.selected].filter((k) => pick.has(k));
+}
+function renderDraftChips() {
+  const on = $("#opt-drafts").checked;
+  $("#draft-options").hidden = !on;
+  if (!on || !state.status) return;
+  const drafted = new Set(draftedPlatforms());
+  $("#draft-chips").replaceChildren(...[...state.selected].map((key) => {
+    const p = state.status.platforms.find((x) => x.key === key);
+    return el("button", { type: "button", class: "chip", "aria-pressed": String(drafted.has(key)),
+      onclick: () => {
+        if (!state.draftPick) state.draftPick = defaultDraftSet();
+        state.draftPick.has(key) ? state.draftPick.delete(key) : state.draftPick.add(key);
+        renderDraftChips(); updateButtons();
+      } }, el("span", { class: "dot" }), p ? p.name : key);
+  }));
+  const hint = drafted.has("instagram") && state.selected.has("facebook") && !drafted.has("facebook")
+    ? "Posting Instagram yourself with “Share to Facebook” on? Untick Facebook under Where so it isn't posted twice."
+    : "";
+  $("#draft-hint").textContent = hint;
+}
+$("#opt-drafts").addEventListener("change", renderDraftChips);
+
 // ------------------------------------------------------------ first comment
 function renderCommentBox() {
   const mode = $("#opt-comment").value;
@@ -336,7 +369,8 @@ function collectOptions() {
     trial_mirror: $("#opt-mirror").checked,
     graduation: $("#opt-graduation").value,
     tiktok_draft: $("#opt-draft").checked,
-    drafts: $("#opt-drafts").checked,
+    drafts: $("#opt-drafts").checked && draftedPlatforms().length > 0,
+    draft_platforms: $("#opt-drafts").checked ? draftedPlatforms() : [],
     first_comment_mode: $("#opt-comment").value,
     first_comment: $("#opt-comment").value === "off" ? "" : $("#opt-comment-text").value.trim(),
     ig_story: $("#opt-story").checked,
@@ -353,18 +387,24 @@ function updateButtons() {
   $("#btn-preview").disabled = !ok;
   $("#btn-post").disabled = !ok;
   const whenMode = $("#opt-when").value;
-  const drafts = $("#opt-drafts").checked;
-  $("#btn-post").textContent = drafts ? `Save ${state.selected.size} draft${state.selected.size === 1 ? "" : "s"}`
+  const nDrafts = $("#opt-drafts").checked ? draftedPlatforms().length : 0;
+  const nPost = state.selected.size - nDrafts;
+  $("#btn-post").textContent = nDrafts && !nPost ? `Save ${nDrafts} draft${nDrafts === 1 ? "" : "s"}`
+    : nDrafts ? `Post ${nPost}, draft ${nDrafts}`
     : whenMode ? "Schedule" : `Post to ${state.selected.size}`;
-  $("#opt-when").disabled = drafts;  // drafts are saved now; you pick the time when you post them
+  $("#opt-when").disabled = nDrafts > 0 && !nPost;  // an all-drafts post is saved now; you pick the time later
 }
 $("#opt-when").addEventListener("change", updateButtons);
 $("#opt-drafts").addEventListener("change", updateButtons);
 $("#btn-preview").addEventListener("click", () => startTask("preview"));
 $("#btn-post").addEventListener("click", () => {
   const names = [...state.selected].map((k) => state.status.platforms.find((p) => p.key === k).name);
-  const ask = $("#opt-drafts").checked
-    ? `Save as drafts on ${names.length} platform(s)? Nothing is published yet.\n\n${names.join(", ")}`
+  const drafted = $("#opt-drafts").checked ? draftedPlatforms() : [];
+  const nameOf = (k) => state.status.platforms.find((p) => p.key === k).name;
+  const posting = [...state.selected].filter((k) => !drafted.includes(k)).map(nameOf);
+  const ask = drafted.length
+    ? (posting.length ? `Post now: ${posting.join(", ")}\n\n` : "Nothing is published yet.\n\n")
+      + `Saved as drafts: ${drafted.map(nameOf).join(", ")}`
     : `Post to ${names.length} platform(s)?\n\n${names.join(", ")}`;
   if (confirm(ask)) startTask("post");
 });
@@ -593,8 +633,7 @@ function jobRow(p, j) {
     status === "held" ? el("div", { class: "muted small" }, j.surface === "trial_reel"
       ? "Goes out 1–2 hours after the main Reel, once you post the drafts."
       : "Ready and waiting. Tap Post drafts below, or save the video and post it yourself from the app.") : null,
-    status === "held" && (j.media || []).length && j.media[0].url
-      ? el("a", { href: j.media[0].url, download: "", class: "jlink" }, "Save video ↓") : null);
+    status === "held" && j.surface !== "trial_reel" ? postYourself(j) : null);
   const actions = el("div", { class: "jactions" });
   const act = (label, fn, cls = "link") => actions.append(el("button", { class: cls, onclick: fn }, label));
   if (status === "pending") act("Cancel", () => jobAction(j.id, "cancel"));
@@ -655,6 +694,44 @@ async function runRefresh(url, body = {}) {
     }
   } catch (err) { toast(err.message); return null; }
 }
+// Post a held draft from the platform's own app: share the video into it, paste the caption.
+function postYourself(j) {
+  const media = (j.media || []).filter((m) => m.url);
+  const box = el("div", { class: "yourself" });
+  if (media.length) {
+    box.append(el("button", { class: "secondary small-btn", onclick: () => shareMedia(j, media) },
+      navigator.canShare ? `Share to ${j.name} / Save ↑` : "Save video ↓"));
+  }
+  if (j.caption) box.append(el("button", { class: "secondary small-btn", onclick: () => copyText(j.caption, "Caption copied") }, "Copy caption"));
+  if (j.first_comment) box.append(el("button", { class: "secondary small-btn", onclick: () => copyText(j.first_comment, "First comment copied") }, "Copy first comment"));
+  box.append(el("div", { class: "muted small" }, `Posting it yourself: Share opens the ${j.name} app with the video (or Save Video to your camera roll), paste the caption, post. Then tap Mark as posted.`));
+  return box;
+}
+
+async function shareMedia(j, media) {
+  try {
+    const files = await Promise.all(media.map(async (m, i) => {
+      const blob = await (await fetch(m.url, { credentials: "same-origin" })).blob();
+      const ext = m.kind === "video" ? "mp4" : "jpg";
+      return new File([blob], `${j.platform}_${i + 1}.${ext}`, { type: blob.type || (m.kind === "video" ? "video/mp4" : "image/jpeg") });
+    }));
+    if (navigator.canShare && navigator.canShare({ files })) {
+      await navigator.share({ files });
+      return;
+    }
+    const a = el("a", { href: media[0].url, download: files[0].name });
+    document.body.append(a); a.click(); a.remove();
+  } catch (err) {
+    if (err && err.name === "AbortError") return;  // you closed the share sheet
+    toast(`Couldn't share it: ${err.message}`);
+  }
+}
+
+async function copyText(text, done) {
+  try { await navigator.clipboard.writeText(text); toast(done); }
+  catch { prompt("Copy this:", text); }
+}
+
 async function publishDrafts(p) {
   const n = p.drafts;
   if (!confirm(`Post ${n} draft${n === 1 ? "" : "s"} now?\n\nThey go live on each platform straight away. A Trial Reel follows 1–2 hours later.`)) return;

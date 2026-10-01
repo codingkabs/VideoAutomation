@@ -173,6 +173,7 @@ def create_app(settings: Settings):
             "defaults": {
                 "trial": s.trial_default, "drafts": s.drafts_default, "trial_delay": list(s.trial_delay_minutes),
                 "first_comment_mode": s.first_comment_mode, "first_comment_text": s.first_comment_text,
+                "draft_platforms": s.draft_platforms,
                 "graduation": s.trial_graduation, "timezone": s.timezone, "subtitle_style": s.subtitle_style,
                 "best_time": best, "claude": bool(s.anthropic_api_key),
             },
@@ -299,6 +300,7 @@ def create_app(settings: Settings):
                                    hook_text=o.get("trial_hook") or None, font_path=s.font_path),
             tiktok_draft=bool(o.get("tiktok_draft")), ig_story=bool(o.get("ig_story")),
             drafts=bool(o.get("drafts")),
+            draft_platforms=[str(p) for p in (o.get("draft_platforms") or [])],
             first_comment_mode=o.get("first_comment_mode") or "off",
             first_comment=(o.get("first_comment") or "").strip() or None,
             fit=o.get("fit") or "auto", allow_trim=bool(o.get("trim")),

@@ -248,3 +248,60 @@ def test_bot_drafts_button(settings, monkeypatch):
     assert any(b["text"] == "💾 Save drafts" for row in api.edits[-1]["markup"]["inline_keyboard"] for b in row)
     press("post")
     assert calls[-1].drafts is True and not calls[-1].dry_run
+
+
+# ------------------------------------------------------------------ per-platform drafts
+
+
+@needs_ffmpeg
+def test_draft_only_instagram_posts_the_rest(media_dir, settings):
+    later = iso(utcnow() + timedelta(hours=5))
+    plan = build_plan(_request(media_dir, draft_platforms=["instagram"], publish_at=later), settings)
+    jobs = _by(plan.jobs)
+    assert jobs[("instagram", "reel")].options.get("hold") and jobs[("instagram", "trial_reel")].options.get("hold")
+    for key in [("facebook", "reel"), ("tiktok", "video"), ("youtube", "short")]:
+        assert not jobs[key].options.get("hold") and not jobs[key].options.get("draft"), key
+        assert jobs[key].run_at == later  # the rest keep their schedule
+    assert "post it yourself from the app" in plan.notes[0] and "TikTok" not in plan.notes[0]
+
+
+@needs_ffmpeg
+def test_draft_platforms_not_in_the_post_means_no_drafts(media_dir, settings):
+    plan = build_plan(_request(media_dir, draft_platforms=["snapchat"], trial=False), settings)
+    assert not any(j.options.get("hold") or j.options.get("draft") for j in plan.jobs)
+
+
+def test_draft_platforms_setting_and_cli(settings, media_dir, monkeypatch, capsys):
+    s = Settings.from_env(env={"VAUTO_HOME": str(settings.home), "VAUTO_DRAFTS_DEFAULT": "true",
+                               "VAUTO_DRAFT_PLATFORMS": "Instagram, facebook"}, dotenv=None)
+    assert s.draft_platforms == ["instagram", "facebook"]
+    req = service.make_request(s, [media_dir / "vertical_silent.mp4"], "c", ["instagram", "tiktok"])
+    assert req.drafts and req.draft_platforms == ["instagram", "facebook"]
+
+    from videoautomation import cli
+
+    assert cli._draft_opts(None, "instagram,TikTok") == {"drafts": True, "draft_platforms": ["instagram", "tiktok"]}
+    assert cli._draft_opts(True, None) == {"drafts": True, "draft_platforms": []}  # --drafts: every platform
+    assert cli._draft_opts(False, None) == {"drafts": False, "draft_platforms": None}
+    assert cli._draft_opts(None, None) == {}
+
+
+def test_my_posts_carries_what_you_need_to_post_it_yourself(settings):
+    store = JobStore(settings.db_path)
+    job = PostJob("instagram", "reel", "zernio", [MediaFile("/x.mp4", "video")], "My caption",
+                  options={"hold": True, "first_comment": "First!"}, idem_key="yourself01", post_id="yp")
+    store.insert(job, "held")
+    j = Tracker(store).describe("yp", settings=settings)["jobs"][0]
+    assert j["caption"] == "My caption" and j["first_comment"] == "First!" and j["status"] == "held"
+
+
+def test_web_defaults_include_draft_platforms(settings, tmp_path):
+    pytest.importorskip("flask")
+    from videoautomation.web.app import create_app
+
+    settings.draft_platforms = ["instagram"]
+    settings.dotenv_path = tmp_path / ".env"
+    client = create_app(settings).test_client()
+    assert client.get("/api/status").get_json()["defaults"]["draft_platforms"] == ["instagram"]
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="draft-chips"' in html and 'id="draft-hint"' in html

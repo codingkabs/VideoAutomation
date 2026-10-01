@@ -198,6 +198,7 @@ class Settings:
     digest: str = "weekly"  # weekly | daily | off
     keep_files_days: int = 14  # delete rendered videos and uploads older than this (0 = keep)
     drafts_default: bool = False  # "Save as drafts" ticked by default
+    draft_platforms: list[str] = field(default_factory=list)  # which platforms drafts apply to ([] = all)
     first_comment_mode: str = "off"  # off | mine | claude
     first_comment_text: str = ""  # your usual first comment, for "mine"
 
@@ -330,6 +331,7 @@ class Settings:
             digest=digest,
             keep_files_days=max(0, keep_days),
             drafts_default=_bool(g("VAUTO_DRAFTS_DEFAULT")),
+            draft_platforms=[p.strip().lower() for p in (g("VAUTO_DRAFT_PLATFORMS") or "").split(",") if p.strip()],
             first_comment_mode=comment_mode,
             first_comment_text=(g("VAUTO_FIRST_COMMENT_TEXT") or "").strip(),
         )

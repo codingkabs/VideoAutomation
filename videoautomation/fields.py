@@ -36,6 +36,8 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
               "off, mine (your usual comment below), or claude (writes one that fits each video)",
               choices=("off", "mine", "claude"), kind="select"),
         Field("VAUTO_FIRST_COMMENT_TEXT", "Your usual first comment", "used when the first comment is set to mine"),
+        Field("VAUTO_DRAFT_PLATFORMS", "Which platforms drafts apply to",
+              "empty = all; e.g. instagram to post Instagram yourself (with Share to Facebook) and the rest automatically"),
         Field("VAUTO_DRAFTS_DEFAULT", "Save as drafts by default",
               "TikTok to your drafts, YouTube as private, the rest kept in vauto until you post them", kind="bool"),
         Field("VAUTO_TRIAL_DELAY", "Trial Reel delay (minutes)", "e.g. 60-120"),
@@ -87,7 +89,7 @@ GROUPS: list[tuple[str, str, tuple[Field, ...]]] = [
         Field("TELEGRAM_BOT_TOKEN", "Bot token", "from @BotFather", secret=True),
         Field("TELEGRAM_OWNER_CHAT_ID", "Your chat id", "where hand-offs and notifications go"),
         Field("TELEGRAM_ALLOWED_USER_IDS", "Allowed user ids", "who may use the bot, comma-separated"),
-        Field("TELEGRAM_CHANNEL_ID", "Channel to post to", "@channelname or -100â€¦ id; add the bot as admin"),
+        Field("TELEGRAM_CHANNEL_ID", "Channel to post to", "@channelname or -100… id; add the bot as admin"),
         Field("TELEGRAM_API_BASE", "Bot API server",
               "for phone videos over 20 MB: http://telegram-bot-api:8081 with the docker bigfiles profile"),
         Field("TELEGRAM_API_ID", "Telegram api_id", "my.telegram.org > API development tools; for the big-files server"),
@@ -139,4 +141,4 @@ ALL_FIELDS: dict[str, Field] = {f.key: f for _, _, fields in GROUPS for f in fie
 def mask(value: str) -> str:
     if not value:
         return ""
-    return "â€¢" * 6 + value[-4:] if len(value) > 8 else "â€¢" * 6
+    return "•" * 6 + value[-4:] if len(value) > 8 else "•" * 6

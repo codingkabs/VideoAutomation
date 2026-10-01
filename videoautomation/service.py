@@ -50,6 +50,8 @@ def make_request(settings: Settings, inputs: list[Path], caption: str, platforms
         opts["trial"] = settings.trial_default
     if opts.get("drafts") is None:
         opts["drafts"] = settings.drafts_default
+    if opts.get("draft_platforms") is None:
+        opts["draft_platforms"] = list(settings.draft_platforms)
     if not opts.get("first_comment_mode"):
         opts["first_comment_mode"] = settings.first_comment_mode
     if opts["first_comment_mode"] == "mine" and opts.get("first_comment") is None:

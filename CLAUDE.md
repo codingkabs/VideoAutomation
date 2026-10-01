@@ -16,6 +16,7 @@ Flags worth knowing:
 - `--trial` adds the delayed, zoomed Instagram Trial Reel; `--trial-hook "text"` adds hook text.
 - `--tiktok-draft` sends TikTok to drafts so the user can add a trending sound.
 - `--first-comment "text"` (or `claude`, or `off`) posts a first comment on Instagram, Facebook, YouTube and LinkedIn; TikTok has none.
+- `--draft-only instagram` drafts just those platforms and publishes the rest.
 - `--drafts` publishes nothing: TikTok drafts, YouTube private, everything else held in vauto until `vauto posts --publish POST_ID`.
 - `--at best|18:30|tomorrow 9am|+2h` schedules the post.
 - `--subtitles auto` or `--subtitles file.srt` burns in captions.

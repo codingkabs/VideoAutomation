@@ -94,10 +94,13 @@ def build_parser() -> argparse.ArgumentParser:
     extra.add_argument("--first-comment", metavar="TEXT|claude|off",
                        help="first comment on Instagram, Facebook, YouTube and LinkedIn: your text, "
                             "'claude' to have Claude write one that fits the video, or 'off'")
-    extra.add_argument("--drafts", dest="drafts", action="store_true", default=None,
-                       help="save as drafts instead of publishing: TikTok drafts, YouTube private, "
-                            "the rest held in vauto until `vauto posts --publish ID`")
-    extra.add_argument("--no-drafts", dest="drafts", action="store_false", help="publish (overrides VAUTO_DRAFTS_DEFAULT)")
+    extra.add_argument("--drafts", dest="drafts", action="store_const", const=True, default=None,
+                       help="save as drafts instead of publishing: TikTok drafts, YouTube private, the rest held "
+                            "in vauto until `vauto posts --publish ID`")
+    extra.add_argument("--draft-only", metavar="PLATFORMS",
+                       help="draft only these platforms and publish the rest, e.g. --draft-only instagram")
+    extra.add_argument("--no-drafts", dest="drafts", action="store_const", const=False,
+                       help="publish (overrides VAUTO_DRAFTS_DEFAULT)")
     extra.add_argument("--ig-story", action="store_true", help="also post the video as an Instagram Story")
     extra.add_argument("--dry-run", action="store_true", help="render media and show the plan without posting")
     extra.add_argument("--force", action="store_true", help="post again even if this exact post was already sent")
@@ -202,6 +205,15 @@ def build_parser() -> argparse.ArgumentParser:
 # ------------------------------------------------------------------ commands
 
 
+def _draft_opts(drafts: bool | None, only: str | None) -> dict:
+    """--drafts (every platform), --draft-only instagram,tiktok (just those), --no-drafts, or the setting."""
+    if only:
+        return {"drafts": True, "draft_platforms": [p.strip().lower() for p in only.split(",") if p.strip()]}
+    if drafts is None:
+        return {}
+    return {"drafts": drafts, "draft_platforms": [] if drafts else None}
+
+
 def _comment_opts(value: str | None) -> dict:
     """--first-comment: None keeps the VAUTO_FIRST_COMMENT default."""
     if value is None:
@@ -235,7 +247,8 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
         variant=VariantOptions(mode=args.trial_mode, zoom=args.trial_zoom, mirror=args.trial_mirror,
                                speed=args.trial_speed, hook_text=args.trial_hook,
                                hook_seconds=args.trial_hook_seconds, font_path=settings.font_path),
-        tiktok_draft=args.tiktok_draft, drafts=args.drafts, ig_story=args.ig_story, fit=args.fit,
+        tiktok_draft=args.tiktok_draft, ig_story=args.ig_story, fit=args.fit,
+        **_draft_opts(args.drafts, args.draft_only),
         **_comment_opts(args.first_comment),
         allow_trim=args.trim,
         audio=args.audio, slide_seconds=args.slide_seconds, cover_ms=args.cover_ms, audio_name=args.audio_name,

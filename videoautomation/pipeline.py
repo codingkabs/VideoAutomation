@@ -58,7 +58,8 @@ class PostRequest:
     trial_report: bool = True
     variant: VariantOptions = field(default_factory=VariantOptions)
     tiktok_draft: bool = False
-    drafts: bool = False  # save everywhere as drafts instead of publishing
+    drafts: bool = False  # save as drafts instead of publishing
+    draft_platforms: list[str] = field(default_factory=list)  # only these as drafts ([] = every platform)
     first_comment: str | None = None  # text to post as the first comment
     first_comment_mode: str = "off"  # off | mine | claude (Claude writes it when no text is given)
     ig_story: bool = False
@@ -193,7 +194,10 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
             raise VautoError(f"{p} has no posting route yet (see `vauto platforms`)")
     if req.publish_at and parse_iso(req.publish_at) <= utcnow():
         raise VautoError("The scheduled time is in the past")
-    schedule_dropped = bool(req.drafts and req.publish_at)
+    drafted = [p for p in req.platforms if not req.draft_platforms or p in req.draft_platforms]
+    if req.drafts and not drafted:
+        req.drafts = False  # none of the drafted platforms is in this post
+    schedule_dropped = bool(req.drafts and req.publish_at and len(drafted) == len(req.platforms))
     if schedule_dropped:
         req.publish_at = None  # drafts are saved now; the time is picked when you post them
 
@@ -241,7 +245,7 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
         _plan_photos(req, settings, images, work, texts, plan, add_job, reject)
     _apply_first_comment(req, settings, plan, texts)
     if req.drafts:
-        _apply_drafts(plan)
+        _apply_drafts(plan, set(drafted))
         if schedule_dropped:
             plan.notes.insert(0, "drafts are saved now, so the scheduled time was ignored")
     plan.notes.extend(_limit_notes(settings, sorted({j.platform for j in plan.jobs}), req.publish_at))
@@ -301,14 +305,14 @@ def _claude_comment(req: PostRequest, settings: Settings, plan: PostPlan, texts:
     return cap.first_comment(caption, frames, settings.caption_model, settings.anthropic_api_key)
 
 
-def _apply_drafts(plan: PostPlan) -> None:
-    """Draft instead of publish: in the platform's own drafts where it allows that
-    (TikTok inbox, YouTube private), otherwise kept in vauto until you post them."""
+def _apply_drafts(plan: PostPlan, platforms: set[str]) -> None:
+    """Draft instead of publish, for ``platforms``: in the platform's own drafts where it allows
+    that (TikTok inbox, YouTube private), otherwise kept in vauto until you post them."""
     native: list[str] = []
     held: list[str] = []
     for job in plan.jobs:
         name = platform_spec(job.platform)["name"]
-        if job.backend == "handoff":
+        if job.platform not in platforms or job.backend == "handoff":
             continue  # hand-offs are posted by you anyway
         if job.backend in NATIVE_DRAFTS.get(job.platform, ()):
             job.options["draft"] = True
@@ -321,7 +325,8 @@ def _apply_drafts(plan: PostPlan) -> None:
             job.options["hold"] = True
             if job.surface != "trial_report":
                 held.append(label_for(job.platform, job.surface).replace(job.platform, name, 1))
-    parts = native + ([f"{', '.join(held)} kept in vauto until you tap Post drafts in My posts"] if held else [])
+    parts = native + ([f"{', '.join(held)} kept in My posts: post it yourself from the app (Share) "
+                        "or tap Post drafts"] if held else [])
     if parts:
         plan.notes.insert(0, "drafts: " + "; ".join(parts))
 

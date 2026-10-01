@@ -344,6 +344,8 @@ Tick **Save as drafts** on the Post screen (or `--drafts`, or the 📝 button in
 | YouTube | Uploaded as **Private**. Set it to Public in the YouTube app when you're ready |
 | Instagram, Facebook, LinkedIn and others | These platforms don't let any app save drafts, so vauto keeps them ready in **My posts**. Tap **Post drafts** to publish them all, or **Save video** to post one yourself from the app |
 
+**Only some platforms as drafts.** Under the tick, choose which platforms to draft; the rest post straight away. For example, draft only Instagram so you can post it yourself from the Instagram app with **Share to Facebook** on. Instagram's combined Instagram + Facebook views only happen when you post from the app: no posting tool, Zernio or Meta's own API, can switch that on. In **My posts**, a held draft has **Share** (opens the platform's app with the video, or saves it to your camera roll), **Copy caption** and **Copy first comment**. After posting, tap **Mark as posted**. If you do this, untick Facebook in vauto so the video isn't posted twice. `VAUTO_DRAFT_PLATFORMS=instagram` makes that the default; on the command line, `--draft-only instagram`.
+
 A Trial Reel in a draft post goes out 1–2 hours after you post the drafts. A scheduled time is ignored for drafts; you choose when by posting them. `VAUTO_DRAFTS_DEFAULT=true` ticks the box for every post. Drafts keep their videos until you post or discard them, however old they get.
 
 ---

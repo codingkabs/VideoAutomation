@@ -409,3 +409,6 @@ details.plat[open] > summary::after { transform: rotate(90deg); }
 .comment-row { margin-top: .8rem; }
 .comment-row textarea { min-height: 3.2rem; margin-top: .4rem; }
 .comment-row select { margin-top: .3rem; }
+
+.yourself { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .2rem; }
+#draft-chips { margin: .4rem 0; }

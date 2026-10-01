@@ -80,7 +80,12 @@
           <div class="card card-options">
             <h2>Options <span class="muted small">(all optional)</span></h2>
             <div class="option-row">
-              <label class="toggle"><input type="checkbox" id="opt-drafts"> <span><b>Save as drafts</b> — don't publish yet. TikTok goes to your drafts, YouTube uploads as private, the rest wait in My posts until you tap Post drafts</span></label>
+              <label class="toggle"><input type="checkbox" id="opt-drafts"> <span><b>Save as drafts</b> — don't publish yet. TikTok goes to your drafts, YouTube uploads as private, the rest wait in My posts for you to post</span></label>
+              <div id="draft-options" class="sub-options" hidden>
+                <span class="small">Draft these (the rest post now):</span>
+                <div id="draft-chips" class="chips"></div>
+                <div id="draft-hint" class="muted small"></div>
+              </div>
             </div>
             <div class="option-row">
               <label class="toggle"><input type="checkbox" id="opt-trial"> <span><b>Instagram Trial Reel</b> — zoomed version for non-followers, later</span></label>

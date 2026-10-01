@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .errors import VautoError
@@ -175,6 +176,59 @@ def adapt(
 
 
 # ------------------------------------------------------------- Claude rewriting
+
+COMMENT_SYSTEM = """You write the first comment a creator posts under their own short-form video.
+
+Look at the frames from the video and read the caption. Write one short, natural comment in the creator's voice that fits this video: a question that invites replies, a fun detail, or a nudge to watch again. Keep it under 150 characters, at most one emoji, no hashtags, no links, and do not repeat the caption. Keep the language of the caption.
+
+Return only the JSON object."""
+
+
+def first_comment(caption: str, frames: list[Path], model: str, api_key: str | None = None) -> str:
+    """Ask Claude for a short first comment that fits the video. Raises VautoError on any failure."""
+    import base64
+
+    try:
+        import anthropic
+    except ImportError as exc:
+        raise VautoError("Claude comments need the anthropic package: pip install 'vauto[claude]'") from exc
+
+    content: list[dict[str, Any]] = []
+    for frame in frames[:4]:
+        data = base64.standard_b64encode(frame.read_bytes()).decode("ascii")
+        content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}})
+    content.append({"type": "text", "text": f"Caption:\n<caption>\n{caption or '(no caption)'}\n</caption>"})
+    schema = {"type": "object", "properties": {"comment": {"type": "string"}},
+              "required": ["comment"], "additionalProperties": False}
+
+    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+    try:
+        response = client.beta.messages.create(
+            model=model,
+            max_tokens=4000,
+            system=COMMENT_SYSTEM,
+            messages=[{"role": "user", "content": content}],
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+    except anthropic.APIConnectionError as exc:
+        raise VautoError(f"Could not reach the Claude API: {exc}") from exc
+    except anthropic.APIStatusError as exc:
+        raise VautoError(f"Claude API error {exc.status_code}: {exc.message}") from exc
+    if response.stop_reason == "refusal":
+        raise VautoError("Claude declined to write a comment for this video")
+    if response.stop_reason == "max_tokens":
+        raise VautoError("Claude's comment was cut off")
+    text = next((b.text for b in response.content if b.type == "text"), "")
+    try:
+        comment = str(json.loads(text).get("comment") or "").strip()
+    except (json.JSONDecodeError, AttributeError) as exc:
+        raise VautoError("Claude returned a comment that was not valid JSON") from exc
+    if not comment:
+        raise VautoError("Claude returned an empty comment")
+    return truncate(comment, 300)
+
 
 REWRITE_SYSTEM = """You adapt one short-form video caption for several social platforms.
 

@@ -406,3 +406,6 @@ details.plat[open] > summary::after { transform: rotate(90deg); }
 .gfacts > div { display: grid; gap: .1rem; }
 .gvauto { border-top: 1px solid var(--line); padding-top: .6rem; }
 @media (max-width: 640px) { .previews.single { grid-template-columns: minmax(0, 150px); } }
+.comment-row { margin-top: .8rem; }
+.comment-row textarea { min-height: 3.2rem; margin-top: .4rem; }
+.comment-row select { margin-top: .3rem; }

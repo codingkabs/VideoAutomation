@@ -17,6 +17,7 @@ GUIDE_FILE = PLATFORMS_FILE.with_name("platform_guide.yaml")
 TIER1 = ("instagram", "facebook", "tiktok", "youtube", "snapchat")
 POSTABLE_STATUSES = ("implemented", "beta", "handoff")
 DEFAULT_BEST_TIMES = "mon-fri 07:30,12:30,18:00,20:30; sat-sun 10:00,19:30"
+COMMENT_MODES = ("off", "mine", "claude")
 
 
 # --------------------------------------------------------------------------- .env
@@ -197,6 +198,8 @@ class Settings:
     digest: str = "weekly"  # weekly | daily | off
     keep_files_days: int = 14  # delete rendered videos and uploads older than this (0 = keep)
     drafts_default: bool = False  # "Save as drafts" ticked by default
+    first_comment_mode: str = "off"  # off | mine | claude
+    first_comment_text: str = ""  # your usual first comment, for "mine"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None, dotenv: Path | None = None) -> "Settings":
@@ -243,6 +246,9 @@ class Settings:
             keep_days = int(g("VAUTO_KEEP_FILES_DAYS") or 14)
         except ValueError as exc:
             raise ConfigError("VAUTO_KEEP_FILES_DAYS must be a whole number of days (0 keeps everything)") from exc
+        comment_mode = (g("VAUTO_FIRST_COMMENT") or "off").strip().lower()
+        if comment_mode not in COMMENT_MODES:
+            raise ConfigError("VAUTO_FIRST_COMMENT must be off, mine or claude")
         style = (g("VAUTO_SUBTITLE_STYLE") or "bold").lower()
         if style not in ("bold", "clean"):
             raise ConfigError("VAUTO_SUBTITLE_STYLE must be bold or clean")
@@ -324,6 +330,8 @@ class Settings:
             digest=digest,
             keep_files_days=max(0, keep_days),
             drafts_default=_bool(g("VAUTO_DRAFTS_DEFAULT")),
+            first_comment_mode=comment_mode,
+            first_comment_text=(g("VAUTO_FIRST_COMMENT_TEXT") or "").strip(),
         )
 
     def trial_backend_for(self) -> str:

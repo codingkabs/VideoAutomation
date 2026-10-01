@@ -127,12 +127,15 @@ class ZernioPublisher(Publisher):
         return platform_spec(platform).get("zernio_platform") or platform
 
     def build_body(self, job: PostJob) -> dict[str, Any]:
+        specific = self.platform_data(job)
+        if job.options.get("first_comment"):
+            specific["firstComment"] = job.options["first_comment"]
         body: dict[str, Any] = {
             "content": job.caption,
             "platforms": [{
                 "platform": self.zernio_name(job.platform),
                 "accountId": self.account_id(job.platform),
-                "platformSpecificData": self.platform_data(job),
+                "platformSpecificData": specific,
             }],
             "mediaItems": [{"type": m.kind, "url": m.url} for m in job.media],
         }
@@ -205,6 +208,8 @@ class ZernioPublisher(Publisher):
             notes = notes + ["uploaded as Private: in the YouTube app, open it and set it to Public to post it"]
         elif final == "draft":
             notes = notes + ["sent to your TikTok inbox: open TikTok, add a sound, and post"]
+        if job.options.get("first_comment"):
+            notes = notes + ["first comment added"]
         return PostResult(job.platform, job.surface, final, url=url, remote_id=post_id, notes=notes,
                           platform_post_id=entry.get("platformPostId"))
 

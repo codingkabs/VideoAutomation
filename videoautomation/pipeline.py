@@ -33,6 +33,9 @@ PHOTO_SLIDESHOW_MIN_S = 6.0
 # Platforms whose own apps can hold a draft made by vauto, per posting route.
 NATIVE_DRAFTS = {"tiktok": ("zernio", "tiktok"), "youtube": ("zernio",)}
 HELD_NOTE = "saved as a draft in vauto: open My posts and tap Post drafts when you're ready"
+# Where an app can add a first comment, per posting route. TikTok allows no app comments.
+FIRST_COMMENT = {"zernio": ("instagram", "facebook", "youtube", "linkedin"), "meta": ("instagram", "facebook")}
+NO_COMMENT_SURFACES = ("story", "trial_report")
 
 Progress = Callable[[str], None]
 
@@ -56,6 +59,8 @@ class PostRequest:
     variant: VariantOptions = field(default_factory=VariantOptions)
     tiktok_draft: bool = False
     drafts: bool = False  # save everywhere as drafts instead of publishing
+    first_comment: str | None = None  # text to post as the first comment
+    first_comment_mode: str = "off"  # off | mine | claude (Claude writes it when no text is given)
     ig_story: bool = False
     fit: str = "auto"
     allow_trim: bool = False
@@ -79,6 +84,7 @@ class PostPlan:
     results: list[PostResult]  # platforms rejected while planning
     notes: list[str] = field(default_factory=list)
     work_dir: str = ""
+    first_comment: str = ""  # the comment each supporting platform gets ("" = none)
 
 
 # ------------------------------------------------------------------ helpers
@@ -233,6 +239,7 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
         _plan_video(req, settings, infos[0], work, texts, plan, add_job, reject)
     else:
         _plan_photos(req, settings, images, work, texts, plan, add_job, reject)
+    _apply_first_comment(req, settings, plan, texts)
     if req.drafts:
         _apply_drafts(plan)
         if schedule_dropped:
@@ -240,6 +247,58 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
     plan.notes.extend(_limit_notes(settings, sorted({j.platform for j in plan.jobs}), req.publish_at))
     plan.notes = list(dict.fromkeys(plan.notes))
     return plan
+
+
+def _apply_first_comment(req: PostRequest, settings: Settings, plan: PostPlan, texts: dict[str, str]) -> None:
+    """Resolve the first comment (yours, or Claude's from frames of the video) and attach it
+    to every job whose platform lets an app comment."""
+    mode = req.first_comment_mode or "off"
+    comment = (req.first_comment or "").strip()
+    if mode == "off" or (mode == "mine" and not comment):
+        if mode == "mine":
+            plan.notes.append("first comment skipped: type the comment first")
+        return
+    if mode == "claude" and not comment:
+        req.progress("Claude is writing the first comment")
+        try:
+            comment = _claude_comment(req, settings, plan, texts)
+        except VautoError as exc:
+            plan.notes.append(f"first comment skipped: {exc}")
+            return
+    plan.first_comment = comment
+    targets, skipped = [], []
+    for job in plan.jobs:
+        if job.surface in NO_COMMENT_SURFACES:
+            continue
+        name = platform_spec(job.platform)["name"]
+        if job.platform in FIRST_COMMENT.get(job.backend, ()):
+            job.options["first_comment"] = comment
+            if job.surface != "trial_reel":
+                targets.append(name)
+        elif job.backend != "handoff":
+            skipped.append(name)
+    who = "Claude's first comment" if mode == "claude" and not req.first_comment else "first comment"
+    if targets:
+        plan.notes.insert(0, f"{who} on {', '.join(dict.fromkeys(targets))}: “{comment}”")
+    if skipped:
+        plan.notes.append(f"no first comment on {', '.join(dict.fromkeys(skipped))}: "
+                          "that platform doesn't let apps post comments")
+
+
+def _claude_comment(req: PostRequest, settings: Settings, plan: PostPlan, texts: dict[str, str]) -> str:
+    from .media.frames import sample_frames
+
+    if not settings.anthropic_api_key:
+        raise VautoError("add an Anthropic API key in Setup (Extras) so Claude can write it")
+    media = next((m for job in plan.jobs for m in job.media if job.surface != "trial_reel"), None)
+    if media is None:
+        raise VautoError("no media to look at")
+    if media.kind == "video":
+        frames = sample_frames(probe(media.path), Path(plan.work_dir) / "comment_frames")
+    else:
+        frames = [Path(m.path) for job in plan.jobs for m in job.media if m.kind == "image"][:4]
+    caption = next(iter(texts.values()), req.caption)
+    return cap.first_comment(caption, frames, settings.caption_model, settings.anthropic_api_key)
 
 
 def _apply_drafts(plan: PostPlan) -> None:

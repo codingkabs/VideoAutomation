@@ -172,6 +172,7 @@ def create_app(settings: Settings):
             "platforms": platform_rows(),
             "defaults": {
                 "trial": s.trial_default, "drafts": s.drafts_default, "trial_delay": list(s.trial_delay_minutes),
+                "first_comment_mode": s.first_comment_mode, "first_comment_text": s.first_comment_text,
                 "graduation": s.trial_graduation, "timezone": s.timezone, "subtitle_style": s.subtitle_style,
                 "best_time": best, "claude": bool(s.anthropic_api_key),
             },
@@ -298,6 +299,8 @@ def create_app(settings: Settings):
                                    hook_text=o.get("trial_hook") or None, font_path=s.font_path),
             tiktok_draft=bool(o.get("tiktok_draft")), ig_story=bool(o.get("ig_story")),
             drafts=bool(o.get("drafts")),
+            first_comment_mode=o.get("first_comment_mode") or "off",
+            first_comment=(o.get("first_comment") or "").strip() or None,
             fit=o.get("fit") or "auto", allow_trim=bool(o.get("trim")),
             subtitles=subtitles, subtitle_style=o.get("subtitle_style") or None,
             rewrite_captions=bool(o.get("rewrite")), dry_run=dry_run, force=bool(o.get("force")),
@@ -330,6 +333,7 @@ def create_app(settings: Settings):
                 })
             task.update(state="done", result={
                 "post_id": plan.post_id, "kind": plan.kind, "notes": plan.notes, "jobs": jobs,
+                "first_comment": plan.first_comment,
                 "results": [{**r.to_dict(), "label": label_for(r.platform, r.surface)} for r in results],
             })
             if not dry_run:

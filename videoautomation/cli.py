@@ -91,6 +91,9 @@ def build_parser() -> argparse.ArgumentParser:
     extra = post.add_argument_group("extras")
     extra.add_argument("--tiktok-draft", action="store_true",
                        help="send to TikTok drafts so you can add a trending sound in the app")
+    extra.add_argument("--first-comment", metavar="TEXT|claude|off",
+                       help="first comment on Instagram, Facebook, YouTube and LinkedIn: your text, "
+                            "'claude' to have Claude write one that fits the video, or 'off'")
     extra.add_argument("--drafts", dest="drafts", action="store_true", default=None,
                        help="save as drafts instead of publishing: TikTok drafts, YouTube private, "
                             "the rest held in vauto until `vauto posts --publish ID`")
@@ -199,6 +202,16 @@ def build_parser() -> argparse.ArgumentParser:
 # ------------------------------------------------------------------ commands
 
 
+def _comment_opts(value: str | None) -> dict:
+    """--first-comment: None keeps the VAUTO_FIRST_COMMENT default."""
+    if value is None:
+        return {}
+    word = value.strip().lower()
+    if word in ("off", "claude"):
+        return {"first_comment_mode": word}
+    return {"first_comment_mode": "mine", "first_comment": value.strip()}
+
+
 def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
     caption = args.caption if args.caption is not None else args.caption_file.read_text(encoding="utf-8")
     platforms = (args.platforms.split(",") if args.platforms else None)
@@ -223,6 +236,7 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
                                speed=args.trial_speed, hook_text=args.trial_hook,
                                hook_seconds=args.trial_hook_seconds, font_path=settings.font_path),
         tiktok_draft=args.tiktok_draft, drafts=args.drafts, ig_story=args.ig_story, fit=args.fit,
+        **_comment_opts(args.first_comment),
         allow_trim=args.trim,
         audio=args.audio, slide_seconds=args.slide_seconds, cover_ms=args.cover_ms, audio_name=args.audio_name,
         subtitles=args.subtitles, subtitle_style=args.subtitle_style,

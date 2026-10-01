@@ -219,6 +219,7 @@ class Bot:
             f"🎵 TikTok: {'send to drafts' if session.tiktok_draft or session.drafts else 'publish'}",
             f"⏰ When: {'next best time' if session.best_time else 'now'}",
             f"💬 Subtitles: {'auto' if session.subtitles else 'off'}",
+            f"🗨 First comment: {self._comment_label()}",
         ]
         if session.preview:
             lines += ["", "<b>Preview</b>", f"<pre>{html.escape(session.preview[:1500])}</pre>"]
@@ -233,6 +234,14 @@ class Bot:
             [{"text": "✖ Cancel", "callback_data": "cancel"}],
         ]}
         return "\n".join(lines), keyboard
+
+    def _comment_label(self) -> str:
+        s = self.settings
+        if s.first_comment_mode == "claude":
+            return "Claude writes one (change in the app's Setup)"
+        if s.first_comment_mode == "mine" and s.first_comment_text:
+            return html.escape(s.first_comment_text[:80])
+        return "off (set one in the app's Setup)"
 
     def show_panel(self, chat_id: int, new: bool = False) -> None:
         session = self.sessions[chat_id]

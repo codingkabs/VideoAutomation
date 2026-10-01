@@ -66,6 +66,16 @@
               <div id="override-fields" class="overrides"></div>
             </details>
             <label class="toggle"><input type="checkbox" id="opt-rewrite"> <span>Let Claude tailor the caption for each platform</span></label>
+            <div class="option-row comment-row">
+              <label>First comment <span class="muted">(Instagram, Facebook, YouTube, LinkedIn)</span>
+                <select id="opt-comment">
+                  <option value="off">Off</option>
+                  <option value="mine">Write my own</option>
+                  <option value="claude">Claude writes one that fits the video</option>
+                </select></label>
+              <textarea id="opt-comment-text" rows="2" maxlength="300" hidden aria-label="First comment"></textarea>
+              <div id="comment-hint" class="muted small"></div>
+            </div>
           </div>
           <div class="card card-options">
             <h2>Options <span class="muted small">(all optional)</span></h2>

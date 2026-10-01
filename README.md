@@ -21,7 +21,7 @@ The research behind it covers about 50 platforms:
 4. [Run it 24/7 with Docker](#run-it-247-with-docker)
 5. [Setup, step by step](#setup-step-by-step)
 6. [Using it](#using-it)
-7. [My posts and Stats](#my-posts-and-stats) · [Drafts](#drafts)
+7. [My posts and Stats](#my-posts-and-stats) · [Drafts](#drafts) · [First comment](#first-comment)
 8. [Trial Reels](#trial-reels)
 9. [Scheduling and best times](#scheduling-and-best-times)
 10. [Subtitles and music](#subtitles-and-music)
@@ -319,6 +319,18 @@ Phone hand-offs, browser uploads, Telegram and TikTok drafts can't report number
 **Daily limits.** vauto counts your recent posts and warns in the preview when you are close to a platform's cap (Instagram 100, Facebook Reels 30, TikTok about 15, Threads 250 a day).
 
 **Your best times.** Once 3 or more posts have numbers, Stats shows which hours and hashtags do best for *you*. Trust that over any general advice, including [the guide](docs/platform-guide.md).
+
+---
+
+## First comment
+
+Under the caption, **First comment** posts a comment on your own video straight after it goes up, on Instagram, Facebook, YouTube and LinkedIn. TikTok doesn't let apps post comments, so it's skipped there.
+
+- **Write my own:** type it, or set a usual one in Setup (`VAUTO_FIRST_COMMENT=mine` and `VAUTO_FIRST_COMMENT_TEXT`).
+- **Claude writes one:** Claude looks at a few frames of the video and your caption and writes one short comment that fits, like a question that gets replies. It appears in the box when you tap **Preview**, so you can edit it before posting. Needs an Anthropic API key in Setup → Extras (about a penny per comment).
+- Command line: `--first-comment "text"`, `--first-comment claude` or `--first-comment off`.
+
+The Trial Reel gets the same comment. With drafts, the comment goes on when you post the drafts.
 
 ---
 

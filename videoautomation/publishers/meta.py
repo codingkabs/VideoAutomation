@@ -38,6 +38,17 @@ class _MetaBase(Publisher):
         return call(self.session.post, f"{self.graph}/{path}", data={**clean, "access_token": token},
                     files=files, timeout=300, context=context)
 
+    def _first_comment(self, object_id: str | None, token: str, job: PostJob, notes: list[str]) -> None:
+        """Post the first comment under a published post. Best effort: the post stays up either way."""
+        text = job.options.get("first_comment")
+        if not text or not object_id:
+            return
+        try:
+            self._post(f"{object_id}/comments", token, "first comment", message=text)
+            notes.append("first comment added")
+        except PublishError as exc:
+            notes.append(f"first comment not added ({exc})")
+
     def _rupload(self, url: str, token: str, media: MediaFile, context: str) -> None:
         path = Path(media.path)
         size = path.stat().st_size
@@ -92,6 +103,7 @@ class InstagramPublisher(_MetaBase):
         notes = []
         if surface == "trial_reel":
             notes.append("trial reel: shown to non-followers first")
+        self._first_comment(media_id, token, job, notes)
         return PostResult(job.platform, surface, "published", url=permalink, remote_id=media_id, notes=notes,
                           platform_post_id=media_id)
 
@@ -213,6 +225,7 @@ class FacebookPublisher(_MetaBase):
                 url = link if link.startswith("http") else f"https://www.facebook.com{link}"
         except PublishError:
             pass
+        self._first_comment(video_id, token, job, notes)
         return PostResult(job.platform, job.surface, "published", url=url, remote_id=video_id, notes=notes,
                           platform_post_id=video_id)
 

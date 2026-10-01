@@ -115,6 +115,9 @@ async function loadStatus() {
   const d = state.status.defaults;
   $("#opt-trial").checked = d.trial;
   $("#opt-drafts").checked = !!d.drafts;
+  $("#opt-comment").value = d.first_comment_mode || "off";
+  if (d.first_comment_mode === "mine" && !$("#opt-comment-text").value) $("#opt-comment-text").value = d.first_comment_text || "";
+  renderCommentBox();
   $("#trial-options").hidden = !d.trial;
   $("#opt-delay-lo").value = d.trial_delay[0];
   $("#opt-delay-hi").value = d.trial_delay[1];
@@ -239,6 +242,7 @@ async function uploadFiles(files) {
   $("#upload-status").textContent = `Uploading ${files.length} file(s)…`;
   state.upload = null;
   updateButtons();
+  if ($("#opt-comment").value === "claude") $("#opt-comment-text").value = "";  // new video, new comment
   try {
     state.upload = await api("/api/upload", { method: "POST", body: form });
     renderPreviews();
@@ -297,6 +301,21 @@ $("#subtitle-file").addEventListener("change", async (e) => {
   } catch (err) { toast(err.message); $("#opt-subtitles").value = ""; }
 });
 
+// ------------------------------------------------------------ first comment
+function renderCommentBox() {
+  const mode = $("#opt-comment").value;
+  const box = $("#opt-comment-text");
+  box.hidden = mode === "off";
+  box.placeholder = mode === "claude"
+    ? "Claude writes it when you tap Preview. You can edit it here before posting."
+    : "e.g. What would you have done? 👇";
+  const noKey = mode === "claude" && state.status && !state.status.defaults.claude;
+  $("#comment-hint").textContent = noKey
+    ? "Add an Anthropic API key in Setup → Extras so Claude can write it."
+    : mode === "off" ? "" : "TikTok doesn't let apps post comments, so it's skipped there.";
+}
+$("#opt-comment").addEventListener("change", renderCommentBox);
+
 function collectOptions() {
   const whenMode = $("#opt-when").value;
   let at = null;
@@ -318,6 +337,8 @@ function collectOptions() {
     graduation: $("#opt-graduation").value,
     tiktok_draft: $("#opt-draft").checked,
     drafts: $("#opt-drafts").checked,
+    first_comment_mode: $("#opt-comment").value,
+    first_comment: $("#opt-comment").value === "off" ? "" : $("#opt-comment-text").value.trim(),
     ig_story: $("#opt-story").checked,
     fit: $("#opt-fit").value,
     trim: $("#opt-trim").checked,
@@ -384,6 +405,10 @@ async function pollTask(id, box) {
 }
 
 function renderResults(result, action) {
+  if (action === "preview" && result.first_comment && $("#opt-comment").value === "claude" && !$("#opt-comment-text").value.trim()) {
+    $("#opt-comment-text").value = result.first_comment;  // posting uses this exact text; edit it if you like
+    toast("Claude wrote the first comment. Edit it under the caption if you like.");
+  }
   const box = $("#results");
   box.hidden = false;
   box.replaceChildren();

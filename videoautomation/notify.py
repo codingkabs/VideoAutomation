@@ -9,7 +9,7 @@ from .telegram_api import TelegramAPI
 
 ICONS = {"published": "✅", "scheduled": "🗓", "draft": "📝", "handoff": "📲", "failed": "❌",
          "skipped": "⏭", "reported": "📊", "submitted": "⏳", "queued": "⏳", "pending": "⏳",
-         "running": "⏳"}
+         "running": "⏳", "held": "📝"}
 
 
 def enabled(settings: Settings) -> bool:

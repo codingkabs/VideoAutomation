@@ -82,3 +82,16 @@ def test_without_a_password_the_login_page_just_goes_home(settings, tmp_path):
     client = create_app(settings).test_client()
     assert client.get("/login?next=/%23stats").headers["Location"] == "/#stats"
     assert client.get("/").status_code == 200
+
+
+def test_iphone_sign_in_form_is_not_treated_as_cross_site(client):
+    """iPhone home-screen apps sent the sign-in form with "Origin: null"."""
+    assert client.get("/login").headers["Referrer-Policy"] == "same-origin"
+    same = client.post("/login", data={"password": PASSWORD, "next": "/"},
+                       headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"})
+    assert same.status_code == 303
+    forged = client.post("/login", data={"password": PASSWORD, "next": "/"},
+                         headers={"Origin": "null", "Sec-Fetch-Site": "cross-site"})
+    assert forged.status_code == 403
+    bare_null = client.post("/login", data={"password": PASSWORD, "next": "/"}, headers={"Origin": "null"})
+    assert bare_null.status_code == 403

@@ -106,7 +106,10 @@ def create_app(settings: Settings):
             return Response("Open vauto at http://127.0.0.1 or set VAUTO_WEB_PASSWORD", 403)
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("Origin")
-            if origin and origin.split("://", 1)[-1] not in own_hosts() and request.path != "/share":
+            # Some browsers send "Origin: null" for their own form posts (e.g. the sign-in page);
+            # Sec-Fetch-Site is set by the browser itself and says whether it really was this site.
+            same_site = origin == "null" and request.headers.get("Sec-Fetch-Site") == "same-origin"
+            if origin and not same_site and origin.split("://", 1)[-1] not in own_hosts()                     and request.path != "/share":
                 return Response("Cross-site request blocked", 403)  # CSRF guard
             # Writes with a body must be JSON (a cross-site form cannot send that without CORS).
             # DELETE carries no body; the Origin check above covers it.
@@ -130,7 +133,9 @@ def create_app(settings: Settings):
     @app.after_request
     def headers(resp):
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["Referrer-Policy"] = "no-referrer"
+        # same-origin: other sites (e.g. a post link you open) learn nothing, while our own form
+        # posts keep a real Origin header. "no-referrer" made iPhones send "Origin: null".
+        resp.headers["Referrer-Policy"] = "same-origin"
         return resp
 
     @app.errorhandler(VautoError)

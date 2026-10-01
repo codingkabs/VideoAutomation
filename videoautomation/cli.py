@@ -370,8 +370,11 @@ def cmd_posts(args: argparse.Namespace, settings: Settings) -> int:
         service.notify_results(settings, results, f"vauto drafts posted {matches[0]['post_id']}")
         return 1 if any(r.status == "failed" for r in results) else 0
     if args.mark_posted:
-        result = tracker.mark_posted(args.mark_posted, args.url)
+        key = tracker.find(args.mark_posted).idem_key
+        result = tracker.mark_posted(key, args.url)
         print(f"Marked {label_for(result.platform, result.surface)} as posted" + (f": {result.url}" if result.url else ""))
+        for follower in service.release_followers(settings, key):
+            print(f"{label_for(follower.platform, follower.surface)} goes out {when(follower.run_at, tz)}")
         return 0
     if args.post_id:
         matches = [p for p in tracker.posts(settings, limit=100000)["posts"] if p["post_id"].startswith(args.post_id)]

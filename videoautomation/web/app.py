@@ -548,7 +548,11 @@ def create_app(settings: Settings):
     @app.post("/api/jobs/<job_id>/posted")
     def job_posted(job_id: str):
         body = request.get_json() or {}
-        return jsonify(tracker().mark_posted(secure_filename(job_id), body.get("url")).to_dict())
+        t = tracker()
+        key = t.find(secure_filename(job_id)).idem_key
+        result = t.mark_posted(key, body.get("url"))
+        followers = service.release_followers(cfg(), key)  # e.g. its Trial Reel, 1-2 hours from now
+        return jsonify({**result.to_dict(), "followers": [f.to_dict() for f in followers]})
 
     @app.post("/api/jobs/<job_id>/numbers")
     def job_numbers(job_id: str):
@@ -604,6 +608,7 @@ def create_app(settings: Settings):
             result = service.cancel(cfg(), job_id)
         elif action == "retry":
             result = service.retry(cfg(), job_id)
+            service.notify_results(cfg(), [result], "vauto")
         else:
             raise VautoError("unknown action")
         return jsonify(result.to_dict())

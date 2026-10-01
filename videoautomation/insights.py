@@ -138,10 +138,24 @@ def compare(settings: Settings, store: JobStore, trial_key: str,
         try:
             setattr(comparison, side, metrics_for(settings, row.job.backend, row.result, session))
         except PublishError as exc:
-            comparison.notes.append(f"{side}: {exc}")
+            # A Reel you posted yourself has no id vauto can read: use the numbers saved in
+            # My posts (typed in with Enter numbers, or fetched earlier) instead.
+            saved = _saved_metrics(store, row.idem_key)
+            if saved:
+                setattr(comparison, side, saved)
+                comparison.notes.append(f"{side}: using the numbers saved in My posts")
+            else:
+                comparison.notes.append(f"{side}: {exc}")
     if comparison.main and comparison.trial:
         comparison.winner = "trial" if _score(comparison.trial) > _score(comparison.main) else "main"
     return comparison
+
+
+def _saved_metrics(store: JobStore, idem_key: str) -> dict[str, float]:
+    from .tracker import Tracker
+
+    latest = Tracker(store).latest_stats([idem_key]).get(idem_key)
+    return dict(latest["metrics"]) if latest else {}
 
 
 def trial_keys(store: JobStore, limit: int = 20) -> list[str]:

@@ -91,9 +91,11 @@ class ZernioStorage:
             raise PublishError(f"Zernio presign failed ({resp.status_code}): {resp.text[:300]}",
                                transient=resp.status_code >= 500 or resp.status_code == 429)
         data = resp.json()
-        upload_url, file_url = data.get("uploadUrl"), data.get("fileUrl")
+        # The live API returns publicUrl; Zernio's docs show fileUrl. Accept either.
+        upload_url = data.get("uploadUrl")
+        file_url = data.get("publicUrl") or data.get("fileUrl") or data.get("url")
         if not upload_url or not file_url:
-            raise PublishError(f"Unexpected Zernio presign response: {data}")
+            raise PublishError(f"Unexpected Zernio upload response (fields: {', '.join(sorted(data)) or 'none'})")
         with path.open("rb") as fh:
             put = self.session.put(upload_url, data=fh, headers={"Content-Type": ctype}, timeout=600)
         if put.status_code >= 400:

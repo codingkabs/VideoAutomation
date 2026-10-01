@@ -305,3 +305,93 @@ def test_web_defaults_include_draft_platforms(settings, tmp_path):
     assert client.get("/api/status").get_json()["defaults"]["draft_platforms"] == ["instagram"]
     html = client.get("/").get_data(as_text=True)
     assert 'id="draft-chips"' in html and 'id="draft-hint"' in html
+
+
+# ------------------------------------------------------------ your workflow, end to end
+
+
+def test_zernio_upload_reads_public_url(settings):
+    from videoautomation.storage import ZernioStorage
+
+    from .conftest import FakeResponse, FakeSession
+
+    clip = settings.home / "clip.mp4"
+    clip.parent.mkdir(parents=True, exist_ok=True)
+    clip.write_bytes(b"video")
+    live = {"uploadUrl": "https://r2.example/temp/x?sig=1", "publicUrl": "https://media.zernio.com/temp/x.mp4",
+            "key": "temp/x.mp4", "expiresIn": 3600}
+    session = FakeSession({("POST", "/media/presign"): FakeResponse(data=live),
+                           ("PUT", "r2.example"): FakeResponse(200, {})})
+    assert ZernioStorage(settings, session=session).put(clip, "k") == "https://media.zernio.com/temp/x.mp4"
+    bad = FakeSession({("POST", "/media/presign"): FakeResponse(data={"uploadUrl": "u", "key": "k"})})
+    with pytest.raises(Exception, match=r"fields: key, uploadUrl"):
+        ZernioStorage(settings, session=bad).put(clip, "k")
+
+
+@needs_ffmpeg
+def test_instagram_by_hand_with_trial_and_first_comment(media_dir, settings, recorder):
+    """Draft only Instagram (+ Trial Reel), TikTok and YouTube post now, YouTube gets the first comment;
+    you post Instagram yourself and Mark it as posted; the Trial Reel then goes out 1-2 hours later."""
+    from videoautomation import insights
+    from videoautomation.scheduler import run_due
+
+    req = PostRequest(inputs=[media_dir / "vertical_silent.mp4"], caption="Save this! #coding",
+                      platforms=["instagram", "tiktok", "youtube"], trial=True, drafts=True,
+                      draft_platforms=["instagram"], first_comment_mode="mine", first_comment="Which one? 👇")
+    plan = build_plan(req, settings)
+    results = {(r.platform, r.surface): r.status for r in execute(plan, settings, req)}
+    assert results == {("instagram", "reel"): "held", ("instagram", "trial_reel"): "held",
+                       ("tiktok", "video"): "published", ("youtube", "short"): "published"}
+    sent = {j.platform: j for j in recorder.jobs}
+    assert sent["youtube"].options["first_comment"] == "Which one? 👇" and "first_comment" not in sent["tiktok"].options
+
+    store = JobStore(settings.db_path)
+    rows = {(r.job.platform, r.job.surface): r for r in store.rows(post_id=plan.post_id)}
+    main_key = rows[("instagram", "reel")].idem_key
+    Tracker(store).mark_posted(main_key, "https://www.instagram.com/reel/abc/")
+    before = utcnow()
+    released = service.release_followers(settings, main_key)
+    assert [(r.surface, r.status) for r in released] == [("trial_reel", "queued")]
+    rows = {(r.job.platform, r.job.surface): r for r in store.rows(post_id=plan.post_id)}
+    trial, report = rows[("instagram", "trial_reel")], rows[("instagram", "trial_report")]
+    assert trial.status == "pending" and report.status == "pending"
+    assert timedelta(minutes=59) <= parse_iso(trial.run_at) - before <= timedelta(minutes=121)
+
+    # The worker posts the Trial Reel when it's due (with the first comment and trial settings).
+    run_due(store, lambda job: recorder, now=parse_iso(trial.run_at) + timedelta(seconds=1))
+    posted_trial = recorder.jobs[-1]
+    assert posted_trial.surface == "trial_reel" and posted_trial.options["first_comment"] == "Which one? 👇"
+    assert store.get(trial.idem_key).status == "published"
+
+    # Three days later the comparison uses the numbers you typed in for the Reel you posted yourself.
+    Tracker(store).set_numbers(main_key, {"views": 5000, "likes": 400})
+    monkey_metrics = {"views": 9000.0, "likes": 700.0}
+    orig = insights.metrics_for
+
+    def fake_metrics(s, backend, result, session):
+        if result.surface == "trial_reel":
+            return monkey_metrics
+        return orig(s, backend, result, session)
+
+    insights.metrics_for = fake_metrics
+    try:
+        comparison = insights.compare(settings, store, trial.idem_key)
+    finally:
+        insights.metrics_for = orig
+    assert comparison.main["views"] == 5000 and comparison.winner == "trial"
+    assert "main: using the numbers saved in My posts" in comparison.notes
+
+
+def test_mark_posted_endpoint_reports_the_trial_time(settings, tmp_path, recorder):
+    pytest.importorskip("flask")
+    from videoautomation.web.app import create_app
+
+    store = _held(settings, "webmain001")
+    trial = PostJob("instagram", "trial_reel", "zernio", [], "c", options={"hold": True}, idem_key="webtrial01",
+                    post_id="heldpost", depends_on="webmain001")
+    store.insert(trial, "held")
+    settings.dotenv_path = tmp_path / ".env"
+    client = create_app(settings).test_client()
+    out = client.post("/api/jobs/webmain0/posted", json={"url": "https://www.instagram.com/reel/x/"}).get_json()
+    assert out["status"] == "published" and out["followers"][0]["surface"] == "trial_reel"
+    assert store.get("webtrial01").status == "pending"

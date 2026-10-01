@@ -635,8 +635,8 @@ function jobRow(p, j) {
       ? "Uploaded as Private: in the YouTube app, set it to Public when you're ready. Then mark it as posted."
       : "In your TikTok drafts: open TikTok, add a sound and post. Then mark it as posted.") : null,
     status === "held" ? el("div", { class: "muted small" }, j.surface === "trial_reel"
-      ? "Goes out 1–2 hours after the main Reel, once you post the drafts."
-      : "Ready and waiting. Tap Post drafts below, or save the video and post it yourself from the app.") : null,
+      ? "Goes out 1–2 hours after the main Reel: when you Mark the Reel as posted, or tap Post drafts."
+      : "Ready and waiting. Post it yourself from the app (below), then tap Mark as posted. Or tap Post drafts to let vauto post it.") : null,
     status === "held" && j.surface !== "trial_reel" ? postYourself(j) : null);
   const actions = el("div", { class: "jactions" });
   const act = (label, fn, cls = "link") => actions.append(el("button", { class: cls, onclick: fn }, label));
@@ -665,8 +665,10 @@ function openForm(row, kind, j) {
     e.preventDefault();
     const values = Object.fromEntries(new FormData(form).entries());
     try {
-      await api(`/api/jobs/${j.id}/${kind}`, { json: values });
-      toast(kind === "posted" ? "Marked as posted" : "Numbers saved");
+      const r = await api(`/api/jobs/${j.id}/${kind}`, { json: values });
+      const trial = (r.followers || []).find((f) => f.surface === "trial_reel");
+      toast(kind !== "posted" ? "Numbers saved"
+        : trial ? `Marked as posted. The Trial Reel goes out ${when(trial.run_at)}.` : "Marked as posted");
       loadPosts();
     } catch (err) { toast(err.message); }
   });

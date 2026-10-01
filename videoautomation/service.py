@@ -117,9 +117,7 @@ def retry(settings: Settings, key_prefix: str) -> PostResult:
 def publish_drafts(settings: Settings, post_id: str) -> list[PostResult]:
     """Post a post's drafts that vauto is holding. Main posts go out now; a Trial Reel is
     scheduled 1-2 hours later and its results check after that (the worker runs both)."""
-    import random
     from concurrent.futures import ThreadPoolExecutor
-    from datetime import timedelta
 
     store = JobStore(settings.db_path)
     rows = [r for r in store.rows(post_id=post_id, limit=1000) if r.status == "held"]
@@ -127,7 +125,7 @@ def publish_drafts(settings: Settings, post_id: str) -> list[PostResult]:
         raise VautoError("This post has no drafts waiting")
     now = utcnow()
     mains = [r.job for r in rows if not r.job.depends_on]
-    followers = sorted((r.job for r in rows if r.job.depends_on), key=lambda j: j.surface == "trial_report")
+    followers = [r.job for r in rows if r.job.depends_on]
     for job in mains:
         job.options.pop("hold", None)
         job.run_at = iso(now)
@@ -136,9 +134,19 @@ def publish_drafts(settings: Settings, post_id: str) -> list[PostResult]:
     with ThreadPoolExecutor(max_workers=max(1, min(6, len(mains)))) as pool:
         results = list(pool.map(lambda j: run_job(store, j, publisher_for), mains))
 
+    return results + _schedule_followers(settings, store, followers, now)
+
+
+def _schedule_followers(settings: Settings, store: JobStore, followers: list[PostJob],
+                        now: datetime) -> list[PostResult]:
+    """Queue held follow-ups: a Trial Reel 1-2 hours from now, then its results check."""
+    import random
+    from datetime import timedelta
+
     lo, hi = settings.trial_delay_minutes
     followed_at: dict[str, datetime] = {}
-    for job in followers:
+    results = []
+    for job in sorted(followers, key=lambda j: j.surface == "trial_report"):
         job.options.pop("hold", None)
         if job.surface == "trial_report":
             when = followed_at.get(job.depends_on or "", now) + timedelta(hours=settings.trial_report_hours)
@@ -151,6 +159,23 @@ def publish_drafts(settings: Settings, post_id: str) -> list[PostResult]:
             results.append(PostResult(job.platform, job.surface, "queued", run_at=job.run_at,
                                       notes=["posts after the main Reel; the worker sends it"]))
     return results
+
+
+def release_followers(settings: Settings, parent_key: str) -> list[PostResult]:
+    """You posted a held main post yourself (Mark as posted): schedule what was waiting for it,
+    such as its Trial Reel."""
+    store = JobStore(settings.db_path)
+    parent = store.get(parent_key)
+    if parent is None:
+        return []
+    held = [r.job for r in store.rows(post_id=parent.job.post_id, limit=1000) if r.status == "held"]
+    chain = {parent_key}
+    followers: list[PostJob] = []
+    for _ in range(3):  # trial reel, then the results check that follows it
+        step = [j for j in held if j.depends_on in chain and j not in followers]
+        followers += step
+        chain |= {j.idem_key for j in step}
+    return _schedule_followers(settings, store, followers, utcnow()) if followers else []
 
 
 def find(store: JobStore, key_prefix: str):

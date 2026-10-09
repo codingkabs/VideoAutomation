@@ -1203,6 +1203,15 @@ loadSnippets();
 loadStatus().then(async () => {
   await loadSharedUpload();
   updateButtons();
+  // ?post=ID opens that post in My posts (links from Telegram, e.g. to cancel a queued Trial Reel).
+  const linked = new URLSearchParams(location.search).get("post");
+  if (linked) {
+    history.replaceState(null, "", location.pathname + "#posts");
+    showTab("posts", false);
+    await loadPosts();
+    openPost(linked);
+    return;
+  }
   const tab = location.hash.replace("#", "");
   if (tab && $(`#tab-${tab}`)) showTab(tab, false);
 }).catch((err) => toast(err.message));

@@ -187,3 +187,13 @@ def test_todays_main_picks_its_slots(page):
     page.uncheck("#opt-today-main")
     assert not page.is_disabled("#opt-when") and page.evaluate("collectOptions()")["at"] is None
     assert not page.errors
+
+
+def test_post_link_opens_it_in_my_posts(page):
+    page.goto(page.url.split("#")[0].split("?")[0] + "?post=uisoon")
+    page.wait_for_selector("#tab-posts.active")
+    item = page.locator("#post-uisoon")
+    item.locator(".pdetail").wait_for(state="visible")
+    assert item.get_by_role("button", name="Cancel").count() >= 1
+    assert page.url.endswith("#posts") and "post=" not in page.url
+    assert not page.errors

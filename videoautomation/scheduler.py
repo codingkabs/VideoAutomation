@@ -109,6 +109,14 @@ class JobStore:
         args.append(limit)
         return [JobRow(r) for r in self.conn.execute(sql, args).fetchall()]
 
+    def reel_rows(self, since: str) -> list[JobRow]:
+        """Instagram Reels and Trial Reels posted, queued or scheduled from ``since`` on."""
+        rows = self.conn.execute(
+            "SELECT * FROM jobs WHERE platform = 'instagram' AND surface IN ('reel', 'trial_reel')"
+            " AND status NOT IN ('failed', 'skipped', 'dry_run', 'held') AND run_at >= ? ORDER BY run_at", (since,)
+        ).fetchall()
+        return [JobRow(r) for r in rows]
+
     # ---------------------------------------------------------------- writes
     def insert(self, job: PostJob, status: str = "pending") -> bool:
         """Insert a new job. Returns False if the idempotency key already exists."""

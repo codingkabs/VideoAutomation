@@ -358,12 +358,22 @@ A Trial Reel is shown only to non-followers at first. Instagram requires a publi
 - **Timing.** It posts at a random point in `--trial-delay 60-120` minutes after the main Reel, and only if the main Reel went out.
 - **Graduation.** `MANUAL` (default) keeps it away from your followers until you share it in the app. `SS_PERFORMANCE` lets Instagram share it automatically if it does well.
 - **Results.** 72 hours later vauto compares views, reach, likes, comments, shares and saves, picks a winner, and messages you on Telegram. See them any time with `vauto trials` or the Trial results tab.
+- **Trial Reel only.** `--trial-only` (or **Trial Reel only** in the app) posts the video to Instagram as a Trial Reel alone, with no main Reel; other platforms in the post go out as usual. Add `--trial-mode none` when the video is already a different edit and needs no zoom. Its 72-hour message shows its own numbers.
+- **Claude's words.** `--trial-caption claude` and `--trial-hook claude` let Claude write a new opening line and on-screen hook for non-followers (needs `ANTHROPIC_API_KEY`).
+
+### Four posts a day: one main, three trials
+
+Set the day's times once: `VAUTO_MAIN_SLOTS` (default `18:00`) and `VAUTO_TRIAL_SLOTS` (default `09:00,12:30,21:00`). Each slot takes one Instagram Reel or Trial Reel; vauto skips any slot that a queued, scheduled or posted Reel already holds, and rolls on to the next day when the day is full.
+
+- **Today's main** in the app (or `--at slot:main --trial --trial-at slot:trial --trial-preset rotate`) posts your video in the next main slot and a remixed Trial Reel in the next trial slot after it. The remix gets a different look each day (zoom, push-in, mirror, slight speed-up), and Claude's caption and hook when a key is set.
+- Other Trial Reels (for example from your own video-making pipeline) use `--trial-only --at slot:trial` and fill the remaining trial slots.
+- `GET /api/slots?date=2026-10-09` lists the day's slots and what holds each one.
 
 ---
 
 ## Scheduling and best times
 
-`--at` (or **When** in the web app, **⏰** in the bot) accepts `now`, `best`, `18:30`, `6pm`, `tomorrow 9am`, `+2h`, `+90m` or `2026-10-01 18:30`. Times use `VAUTO_TIMEZONE` (default Europe/London).
+`--at` (or **When** in the web app, **⏰** in the bot) accepts `now`, `best`, `slot:main`, `slot:trial` (see [Four posts a day](#four-posts-a-day-one-main-three-trials)), `18:30`, `6pm`, `tomorrow 9am`, `+2h`, `+90m` or `2026-10-01 18:30`. Times use `VAUTO_TIMEZONE` (default Europe/London).
 
 `best` picks the next slot from `VAUTO_BEST_TIMES`. The default is UK engagement peaks: weekdays 07:30, 12:30, 18:00, 20:30 and weekends 10:00, 19:30. With `ZERNIO_PROFILE_ID` and Zernio analytics, it uses your own audience's best hours instead.
 

@@ -88,13 +88,18 @@
               </div>
             </div>
             <div class="option-row">
+              <label class="toggle"><input type="checkbox" id="opt-today-main"> <span><b>Today's main</b> — main Reel at your main time, plus a remixed Trial Reel in a trial slot</span></label>
+              <div id="today-note" class="muted small"></div>
+            </div>
+            <div class="option-row">
               <label class="toggle"><input type="checkbox" id="opt-trial"> <span><b>Instagram Trial Reel</b> — zoomed version for non-followers, later</span></label>
             </div>
             <div id="trial-options" class="sub-options" hidden>
-              <label>Delay <span class="muted">(minutes)</span>
+              <label class="toggle"><input type="checkbox" id="opt-trial-only"> <span>Trial Reel only <span class="muted">(no main Reel on Instagram)</span></span></label>
+              <label id="delay-label">Delay <span class="muted">(minutes)</span>
                 <span class="inline"><input type="number" id="opt-delay-lo" min="0" value="60"> to <input type="number" id="opt-delay-hi" min="0" value="120"></span></label>
               <label>Look
-                <select id="opt-trial-mode"><option value="static">Zoom in</option><option value="push">Slow push-in</option></select></label>
+                <select id="opt-trial-mode"><option value="static">Zoom in</option><option value="push">Slow push-in</option><option value="none">Keep the framing</option></select></label>
               <label>Zoom <span id="zoom-value" class="muted">1.15×</span>
                 <input type="range" id="opt-zoom" min="1.05" max="1.5" step="0.01" value="1.15"></label>
               <label>Hook text <span class="muted">(first 3 seconds)</span>
@@ -112,7 +117,7 @@
             </div>
             <div class="option-row">
               <label>When
-                <select id="opt-when"><option value="">Now</option><option value="best">Next best time</option><option value="custom">Pick a time</option></select></label>
+                <select id="opt-when"><option value="">Now</option><option value="best">Next best time</option><option value="slot:main">Next main slot</option><option value="slot:trial">Next trial slot</option><option value="custom">Pick a time</option></select></label>
               <input type="datetime-local" id="opt-at" hidden>
               <div id="best-note" class="muted small"></div>
             </div>

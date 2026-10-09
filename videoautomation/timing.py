@@ -6,6 +6,9 @@
 
 `best` picks the next slot from VAUTO_BEST_TIMES (UK engagement peaks by
 default), or from Zernio's best-time analytics when ZERNIO_PROFILE_ID is set.
+
+`slot:main` and `slot:trial` pick the next posting slot from VAUTO_MAIN_SLOTS or
+VAUTO_TRIAL_SLOTS that no other Instagram Reel already holds (see free_slot).
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from .errors import ConfigError
 
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 MIN_LEAD = timedelta(minutes=10)
+SLOT_GAP = timedelta(minutes=30)  # a Reel this close to a slot holds it
 
 
 def zone(settings: Settings) -> ZoneInfo:
@@ -42,11 +46,16 @@ def _clock(text: str) -> time:
     return time(hour, minute)
 
 
-def parse_slots(spec: str) -> dict[int, list[time]]:
-    """'mon-fri 07:30,12:30; sat-sun 10:00' -> {0: [07:30, 12:30], ..., 5: [10:00], 6: [10:00]}."""
+def parse_slots(spec: str, name: str = "VAUTO_BEST_TIMES") -> dict[int, list[time]]:
+    """'mon-fri 07:30,12:30; sat-sun 10:00' -> {0: [07:30, 12:30], ..., 5: [10:00], 6: [10:00]}.
+    Times without days ('09:00,12:30') apply to every day."""
     slots: dict[int, list[time]] = {d: [] for d in range(7)}
     for part in filter(None, (p.strip() for p in spec.split(";"))):
         days_text, _, times_text = part.partition(" ")
+        if days_text[:1].isdigit():
+            for day in slots:
+                slots[day] += [_clock(t) for t in part.split(",") if t.strip()]
+            continue
         days: list[int] = []
         for chunk in days_text.lower().split(","):
             if "-" in chunk:
@@ -56,13 +65,13 @@ def parse_slots(spec: str) -> dict[int, list[time]]:
             elif chunk[:3] in DAYS:
                 days.append(DAYS.index(chunk[:3]))
             else:
-                raise ConfigError(f"Bad day {chunk!r} in VAUTO_BEST_TIMES")
+                raise ConfigError(f"Bad day {chunk!r} in {name}")
         for day in days:
             slots[day] += [_clock(t) for t in times_text.split(",") if t.strip()]
     for day in slots:
         slots[day] = sorted(set(slots[day]))
     if not any(slots.values()):
-        raise ConfigError("VAUTO_BEST_TIMES has no times")
+        raise ConfigError(f"{name} has no times")
     return slots
 
 
@@ -75,6 +84,22 @@ def next_slot(slots: dict[int, list[time]], now: datetime, tz: ZoneInfo) -> date
             if candidate - now >= MIN_LEAD:
                 return candidate.astimezone(timezone.utc)
     raise ConfigError("No upcoming slot in VAUTO_BEST_TIMES")
+
+
+def free_slot(slots: dict[int, list[time]], start: datetime, tz: ZoneInfo, taken: list[datetime],
+              name: str = "the posting slots") -> datetime:
+    """The first slot at least MIN_LEAD after ``start`` with no ``taken`` time within SLOT_GAP."""
+    local = start.astimezone(tz)
+    for offset in range(15):
+        day = (local + timedelta(days=offset)).date()
+        for t in slots.get(day.weekday(), []):
+            candidate = datetime.combine(day, t, tzinfo=tz).astimezone(timezone.utc)
+            if candidate - start < MIN_LEAD:
+                continue
+            if any(abs(candidate - other) < SLOT_GAP for other in taken):
+                continue
+            return candidate
+    raise ConfigError(f"No free time in {name} for the next two weeks; add more times or cancel a queued post")
 
 
 def best_time(settings: Settings, now: datetime | None = None, platform: str = "instagram",

@@ -294,3 +294,50 @@ def rewrite_captions(caption: str, platforms: list[str], limits: dict[str, int],
     except json.JSONDecodeError as exc:
         raise VautoError("Claude returned captions that were not valid JSON") from exc
     return {p: str(data.get(p) or caption) for p in platforms}
+
+
+REMIX_SYSTEM = """You write the caption and on-screen hook for an Instagram Trial Reel.
+
+A Trial Reel is shown to people who don't follow the creator yet, so the first line must stop a stranger scrolling. Write a different opening hook from the original caption, keeping the creator's meaning, voice, facts, @mentions and links. Do not invent claims, offers or links. Keep the language and spelling of the original, and use commas rather than dashes.
+
+- caption: the new caption, hook in the first line, at most 5 hashtags, under 2000 characters.
+- hook: 3 to 8 words shown on screen for the first seconds; no hashtags or emoji.
+
+Return only the JSON object."""
+
+
+def trial_remix(caption: str, model: str, api_key: str | None = None) -> dict[str, str]:
+    """Ask Claude for a Trial Reel caption and on-screen hook: {"caption", "hook"}.
+    Raises VautoError on any failure, so callers can fall back to the original caption."""
+    try:
+        import anthropic
+    except ImportError as exc:
+        raise VautoError("Claude remix text needs the anthropic package: pip install 'vauto[claude]'") from exc
+
+    schema = {"type": "object", "properties": {"caption": {"type": "string"}, "hook": {"type": "string"}},
+              "required": ["caption", "hook"], "additionalProperties": False}
+    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+    try:
+        response = client.beta.messages.create(
+            model=model,
+            max_tokens=4000,
+            system=REMIX_SYSTEM,
+            messages=[{"role": "user", "content": f"Original caption:\n<caption>\n{caption}\n</caption>"}],
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+    except anthropic.APIConnectionError as exc:
+        raise VautoError(f"Could not reach the Claude API: {exc}") from exc
+    except anthropic.APIStatusError as exc:
+        raise VautoError(f"Claude API error {exc.status_code}: {exc.message}") from exc
+    if response.stop_reason == "refusal":
+        raise VautoError("Claude declined to write the Trial Reel text")
+    if response.stop_reason == "max_tokens":
+        raise VautoError("Claude's Trial Reel text was cut off")
+    text = next((b.text for b in response.content if b.type == "text"), "")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise VautoError("Claude returned Trial Reel text that was not valid JSON") from exc
+    return {"caption": str(data.get("caption") or "").strip(), "hook": str(data.get("hook") or "").strip()}

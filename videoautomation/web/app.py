@@ -355,7 +355,9 @@ def create_app(settings: Settings):
         inputs = sorted(p for p in folder.iterdir() if p.is_file() and not p.name.endswith(".poster.jpg"))
         platforms = body.get("platforms") or s.default_platforms
         o = body.get("options") or {}
-        publish_at, note = service.resolve_publish_at(s, o.get("at") or None, platforms)
+        publish_at, trial_at, time_notes = service.resolve_times(s, o.get("at") or None, o.get("trial_at") or None,
+                                                                platforms, dry_run)
+        note = "; ".join(time_notes) or None
         subtitles = o.get("subtitles") or None
         if subtitles not in (None, "auto"):
             sub_path = Path(subtitles).resolve()
@@ -367,6 +369,9 @@ def create_app(settings: Settings):
             caption_overrides={k: v for k, v in (body.get("caption_overrides") or {}).items() if v},
             publish_at=publish_at,
             trial=bool(o.get("trial")),
+            trial_only=bool(o.get("trial_only")),
+            trial_at=trial_at,
+            trial_preset=o.get("trial_preset") or None,
             trial_delay=tuple(int(x) for x in delay) if delay else None,
             trial_graduation=o.get("graduation"),
             trial_caption=o.get("trial_caption") or None,
@@ -607,6 +612,18 @@ def create_app(settings: Settings):
             "notes": r.result.notes if r.result else [],
         } for r in rows])
 
+    @app.get("/api/slots")
+    def slots():
+        """The day's main and Trial Reel slots and what holds each (default: today)."""
+        from datetime import date, datetime
+
+        raw = request.args.get("date")
+        try:
+            day = date.fromisoformat(raw) if raw else datetime.now(zone(cfg())).date()
+        except ValueError as exc:
+            raise VautoError("date must look like 2026-10-09") from exc
+        return jsonify({"date": day.isoformat(), "slots": service.day_slots(cfg(), day)})
+
     @app.post("/api/jobs/<job_id>/<action>")
     def job_action(job_id: str, action: str):
         if action == "cancel":
@@ -685,8 +702,11 @@ def create_app(settings: Settings):
 
     @app.get("/api/best-time")
     def best_time():
-        _, note = service.resolve_publish_at(cfg(), "best", request.args.getlist("p") or cfg().default_platforms)
-        return jsonify({"note": note, "timezone": str(zone(cfg()))})
+        """When a post would go out: ?at=best (default) or slot:main / slot:trial, plus ?trial_at=slot:trial."""
+        platforms = request.args.getlist("p") or cfg().default_platforms
+        _, _, notes = service.resolve_times(cfg(), request.args.get("at") or "best", request.args.get("trial_at"),
+                                            platforms, dry_run=True)
+        return jsonify({"note": "; ".join(notes), "timezone": str(zone(cfg()))})
 
     return app
 

@@ -174,3 +174,16 @@ def test_every_control_has_a_name(page):
                          && !n.closest('label') && !(n.id && document.querySelector(`label[for="${n.id}"]`)))
           .map((n) => n.outerHTML.slice(0, 80))""")
         assert not unnamed, f"{tab}: {unnamed}"
+
+
+def test_todays_main_picks_its_slots(page):
+    page.check("#opt-today-main")
+    page.wait_for_selector("#today-note:has-text('main slot:')")
+    assert "Trial Reel at" in page.inner_text("#today-note")
+    assert page.is_disabled("#opt-trial") and page.is_disabled("#opt-when")
+    opts = page.evaluate("collectOptions()")
+    assert opts["at"] == "slot:main" and opts["trial_at"] == "slot:trial" and opts["trial_preset"] == "rotate"
+    assert opts["trial"] is True and opts["trial_only"] is False
+    page.uncheck("#opt-today-main")
+    assert not page.is_disabled("#opt-when") and page.evaluate("collectOptions()")["at"] is None
+    assert not page.errors

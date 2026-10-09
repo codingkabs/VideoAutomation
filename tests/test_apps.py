@@ -66,6 +66,22 @@ def test_insights_job_notifies(settings, monkeypatch):
     assert sent and "Trial Reel results" in sent[0]
 
 
+def test_standalone_trial_reports_its_own_numbers(settings, monkeypatch):
+    store = JobStore(settings.db_path)
+    trial = PostJob("instagram", "trial_reel", "zernio", [], "Nobody tells you this\n#coding",
+                    idem_key="trial1", post_id="p1")
+    store.insert(trial, "running")
+    store.finish("trial1", PostResult("instagram", "trial_reel", "published", url="u2", platform_post_id="m2"))
+    sent = []
+    monkeypatch.setattr(insights, "metrics_for", lambda s, b, r, sess: {"views": 4200, "shares": 31})
+    monkeypatch.setattr(insights.notify, "send", lambda s, text, session=None: sent.append(text) or True)
+    job = PostJob("instagram", "trial_report", "insights", [], "", options={"trial_key": "trial1"})
+    result = insights.InsightsPublisher(settings, session=FakeSession({})).publish(job)
+    assert not any("main reel" in line for line in result.notes)
+    assert any(line.startswith("views") and "4200" in line for line in result.notes)
+    assert "Nobody tells you this" in sent[0] and "u2" in sent[0]
+
+
 # --------------------------------------------------------------------- bot
 
 
@@ -239,6 +255,42 @@ def test_web_upload_preview_flow(client, media_dir):
     ig = next(j for j in result["jobs"] if j["platform"] == "instagram" and j["surface"] == "reel")
     assert "#f" not in ig["caption"] and ig["media"][0]["url"].startswith("/media/")
     assert client.get(ig["media"][0]["url"]).status_code == 200
+
+
+def _run_task(client, body):
+    import time
+
+    task = client.post("/api/tasks", json=body).get_json()
+    for _ in range(300):
+        state = client.get(f"/api/tasks/{task['task_id']}").get_json()
+        if state["state"] != "running":
+            return state
+        time.sleep(0.5)
+    raise AssertionError("task did not finish")
+
+
+@needs_ffmpeg
+def test_web_trial_only_in_a_trial_slot(client, media_dir):
+    with open(media_dir / "landscape.mp4", "rb") as fh:
+        upload_id = client.post("/api/upload", data={"files": (fh, "clip.mp4")},
+                                content_type="multipart/form-data").get_json()["upload_id"]
+    state = _run_task(client, {"action": "preview", "upload_id": upload_id, "caption": "Auto reel #coding",
+                               "platforms": ["instagram", "youtube"],
+                               "options": {"trial_only": True, "trial_mode": "none", "at": "slot:trial"}})
+    assert state["state"] == "done", state
+    result = state["result"]
+    assert [(j["platform"], j["surface"]) for j in result["jobs"]] == [("youtube", "short"), ("instagram", "trial_reel")]
+    assert all(j["run_at"] for j in result["jobs"]) and result["notes"][0].startswith("trial slot:")
+
+
+def test_web_slots_and_slot_times(client):
+    day = client.get("/api/slots?date=2026-10-12").get_json()
+    assert day["date"] == "2026-10-12"
+    assert [(s["kind"], s["local"]) for s in day["slots"]] == [("trial", "09:00"), ("trial", "12:30"),
+                                                               ("main", "18:00"), ("trial", "21:00")]
+    assert client.get("/api/slots?date=soon").status_code == 400
+    note = client.get("/api/best-time?at=slot:main&trial_at=slot:trial").get_json()["note"]
+    assert note.startswith("main slot:") and "Trial Reel at" in note
 
 
 def test_web_settings_round_trip(client, settings):

@@ -2,7 +2,8 @@
 
 Instagram demotes near-duplicates, so the variant changes framing (static zoom
 or a slow push-in), and can add a hook caption, a mirror flip, or a small speed
-change. The pipeline also gives it a different cover frame.
+change. The pipeline also gives it a different cover frame. Mode "none" keeps the
+framing as it is, for videos that are already a different edit.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 import textwrap
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from ..errors import MediaError
@@ -19,7 +21,14 @@ from ..ffmpeg import probe
 from ..models import MediaInfo
 from .normalize import TARGET_H, TARGET_W, encode
 
-VARIANT_MODES = ("static", "push")
+VARIANT_MODES = ("static", "push", "none")
+# Remix looks for the Trial Reel of your main video, one per day in turn, so trials don't look alike.
+TRIAL_PRESETS = (
+    {"mode": "static", "zoom": 1.15, "mirror": False, "speed": 1.0},
+    {"mode": "push", "zoom": 1.2, "mirror": False, "speed": 1.0},
+    {"mode": "static", "zoom": 1.1, "mirror": True, "speed": 1.0},
+    {"mode": "push", "zoom": 1.12, "mirror": False, "speed": 1.05},
+)
 FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -39,10 +48,21 @@ class VariantOptions:
     hook_seconds: float = 3.0
     font_path: str | None = None
 
+    @property
+    def is_identity(self) -> bool:
+        """True when the variant would be the same picture as the original."""
+        return self.mode == "none" and not self.mirror and self.speed == 1.0 and not self.hook_text
+
+    def apply_preset(self, day: date) -> None:
+        """Take the remix look for ``day`` (the hook text and font are kept)."""
+        preset = TRIAL_PRESETS[day.toordinal() % len(TRIAL_PRESETS)]
+        self.mode, self.zoom, self.mirror, self.speed = (preset["mode"], preset["zoom"], preset["mirror"],
+                                                         preset["speed"])
+
     def validate(self) -> None:
         if self.mode not in VARIANT_MODES:
-            raise MediaError(f"Unknown trial mode {self.mode!r}; use static or push")
-        if not 1.0 < self.zoom <= 2.0:
+            raise MediaError(f"Unknown trial mode {self.mode!r}; use static, push or none")
+        if self.mode != "none" and not 1.0 < self.zoom <= 2.0:
             raise MediaError("Trial zoom must be above 1.0 and at most 2.0 (for example 1.15)")
         if not 0.5 <= self.speed <= 2.0:
             raise MediaError("Trial speed must be between 0.5 and 2.0")
@@ -96,7 +116,9 @@ def variant_graph(master: MediaInfo, opts: VariantOptions, work_dir: Path) -> tu
     """Return (video graph reading [0:v] → [v], audio filter or None)."""
     opts.validate()
     chain: list[str] = []
-    if opts.mode == "static":
+    if opts.mode == "none":
+        chain.append(f"scale={TARGET_W}:{TARGET_H}")
+    elif opts.mode == "static":
         chain.append(f"crop=iw/{opts.zoom:g}:ih/{opts.zoom:g}")
         chain.append(f"scale={TARGET_W}:{TARGET_H}")
     else:

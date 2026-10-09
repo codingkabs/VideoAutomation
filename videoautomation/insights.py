@@ -33,10 +33,15 @@ class TrialComparison:
     trial: dict[str, float] = field(default_factory=dict)
     winner: str | None = None
     notes: list[str] = field(default_factory=list)
+    standalone: bool = False  # a Trial Reel posted on its own, with no main Reel
+    caption: str = ""
 
     def lines(self) -> list[str]:
         if not self.main and not self.trial:
             return self.notes or ["no metrics available yet"]
+        if self.standalone:
+            out = [f"{key:<10} {self.trial[key]:>9.0f}" for key in SHOWN if key in self.trial]
+            return out + ["tip: if it did well, share it with followers from the Instagram app"] + self.notes
         out = [f"{'metric':<10} {'main':>9} {'trial':>9}"]
         for key in SHOWN:
             if key in self.main or key in self.trial:
@@ -50,7 +55,7 @@ class TrialComparison:
     def to_dict(self) -> dict[str, Any]:
         return {"post_id": self.post_id, "main_url": self.main_url, "trial_url": self.trial_url,
                 "main": self.main, "trial": self.trial, "winner": self.winner, "notes": self.notes,
-                "lines": self.lines()}
+                "standalone": self.standalone, "caption": self.caption, "lines": self.lines()}
 
 
 def _value(entry: dict[str, Any]) -> float:
@@ -130,8 +135,11 @@ def compare(settings: Settings, store: JobStore, trial_key: str,
     main_row = store.get(trial_row.job.depends_on) if trial_row.job.depends_on else None
     comparison = TrialComparison(trial_row.job.post_id,
                                  main_row.result.url if main_row and main_row.result else None,
-                                 trial_row.result.url if trial_row.result else None)
-    for side, row in (("main", main_row), ("trial", trial_row)):
+                                 trial_row.result.url if trial_row.result else None,
+                                 standalone=not trial_row.job.depends_on,
+                                 caption=trial_row.job.caption.split("\n", 1)[0][:80])
+    sides = (("trial", trial_row),) if comparison.standalone else (("main", main_row), ("trial", trial_row))
+    for side, row in sides:
         if row is None or row.result is None or row.status not in ("published", "submitted", "scheduled"):
             comparison.notes.append(f"{side} reel has not published")
             continue
@@ -170,6 +178,10 @@ class InsightsPublisher(Publisher):
     def publish(self, job: PostJob) -> PostResult:
         store = JobStore(self.settings.db_path)
         comparison = compare(self.settings, store, job.options["trial_key"], self.session)
-        text = "\n".join(["📊 Trial Reel results", comparison.main_url or "", *comparison.lines()])
+        if comparison.standalone:
+            head = ["📊 Trial Reel results", comparison.caption, comparison.trial_url or ""]
+        else:
+            head = ["📊 Trial Reel results", comparison.main_url or ""]
+        text = "\n".join([*filter(None, head), *comparison.lines()])
         notify.send(self.settings, text, self.session)
         return PostResult(job.platform, job.surface, "reported", notes=comparison.lines())

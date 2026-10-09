@@ -36,6 +36,7 @@ HELD_NOTE = "saved as a draft in vauto: open My posts and tap Post drafts when y
 # Where an app can add a first comment, per posting route. TikTok allows no app comments.
 FIRST_COMMENT = {"zernio": ("instagram", "facebook", "youtube", "linkedin"), "meta": ("instagram", "facebook")}
 NO_COMMENT_SURFACES = ("story", "trial_report")
+CLAUDE = "claude"  # as a Trial Reel caption or hook: let Claude write it
 
 Progress = Callable[[str], None]
 
@@ -52,6 +53,8 @@ class PostRequest:
     caption_overrides: dict[str, str] = field(default_factory=dict)
     publish_at: str | None = None  # ISO UTC; None = now
     trial: bool = False
+    trial_only: bool = False  # Instagram gets only the Trial Reel (no main Reel); other platforms post as usual
+    trial_at: str | None = None  # ISO UTC time for the Trial Reel; None = 1-2 hours after the main Reel
     trial_delay: tuple[int, int] = (60, 120)
     trial_graduation: str = "MANUAL"
     trial_caption: str | None = None
@@ -146,6 +149,23 @@ def _captions_for(req: PostRequest, settings: Settings, notes: list[str]) -> dic
     return base
 
 
+def _claude_remix(req: PostRequest, settings: Settings, texts: dict[str, str], notes: list[str]) -> None:
+    """Fill a Trial Reel caption or hook given as "claude" with Claude's remix of the caption."""
+    want_caption, want_hook = req.trial_caption == CLAUDE, req.variant.hook_text == CLAUDE
+    req.progress("Writing the Trial Reel caption with Claude")
+    try:
+        remix = cap.trial_remix(texts.get("instagram", req.caption), settings.caption_model,
+                                settings.anthropic_api_key)
+        notes.append(f"trial reel: caption and hook written by {settings.caption_model}")
+    except VautoError as exc:
+        remix = {}
+        notes.append(f"trial reel: Claude text skipped, using your caption: {exc}")
+    if want_caption:
+        req.trial_caption = remix.get("caption") or None
+    if want_hook:
+        req.variant.hook_text = remix.get("hook") or None
+
+
 def _adapted(platform: str, text: str, surface: str, settings: Settings) -> cap.PlatformCaption:
     return cap.adapt(platform, text, platform_spec(platform)["caption"], surface,
                      youtube_shorts_tag=settings.youtube_add_shorts_tag,
@@ -194,6 +214,14 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
             raise VautoError(f"{p} has no posting route yet (see `vauto platforms`)")
     if req.publish_at and parse_iso(req.publish_at) <= utcnow():
         raise VautoError("The scheduled time is in the past")
+    if req.trial_only:
+        req.trial = True
+    if req.trial_at:
+        trial_at = parse_iso(req.trial_at)
+        if trial_at <= utcnow():
+            raise VautoError("The Trial Reel time is in the past")
+        if not req.trial_only and req.publish_at and trial_at <= parse_iso(req.publish_at):
+            raise VautoError("The Trial Reel time must be after the main post")
     drafted = [p for p in req.platforms if not req.draft_platforms or p in req.draft_platforms]
     if req.drafts and not drafted:
         req.drafts = False  # none of the drafted platforms is in this post
@@ -218,6 +246,8 @@ def build_plan(req: PostRequest, settings: Settings) -> PostPlan:
 
     notes: list[str] = []
     texts = _captions_for(req, settings, notes)
+    if req.trial and kind == "video" and CLAUDE in (req.trial_caption, req.variant.hook_text):
+        _claude_remix(req, settings, texts, notes)
     plan = PostPlan(post_id=post_id, kind=kind, jobs=[], results=[], notes=notes, work_dir=str(work))
 
     def add_job(platform: str, surface: str, media: list[MediaFile], adapted: cap.PlatformCaption,
@@ -379,6 +409,8 @@ def _plan_video(req, settings, src: MediaInfo, work: Path, texts, plan, add_job,
     main_ig: PostJob | None = None
     req.progress(f"Preparing {len(req.platforms)} platform version(s)")
     for platform in req.platforms:
+        if platform == "instagram" and req.trial_only:
+            continue  # Instagram gets the Trial Reel alone, planned below
         spec = platform_spec(platform)
         surface = default_surface(platform, "video", settings)
         try:
@@ -404,6 +436,12 @@ def _plan_video(req, settings, src: MediaInfo, work: Path, texts, plan, add_job,
             reject("instagram", "story", str(exc))
 
     if req.trial:
+        if req.trial_only:
+            if "instagram" not in req.platforms:
+                plan.notes.append("trial reel skipped: Instagram is not in this post")
+                return
+            _plan_trial(req, settings, clean, cues, style, work, texts, plan, add_job, reject, None)
+            return
         if main_ig is None:
             plan.notes.append("trial reel skipped: Instagram is not in this post or its main Reel was rejected")
             return
@@ -411,7 +449,8 @@ def _plan_video(req, settings, src: MediaInfo, work: Path, texts, plan, add_job,
 
 
 def _plan_trial(req, settings, clean: MediaInfo, cues, style, work: Path, texts, plan, add_job, reject,
-                main_ig: PostJob) -> None:
+                main_ig: PostJob | None) -> None:
+    """Plan the Instagram Trial Reel: after ``main_ig`` when given, otherwise on its own."""
     opts_v = req.variant
     sig = hashlib.sha256(repr((opts_v.mode, opts_v.zoom, opts_v.mirror, opts_v.speed, opts_v.hook_text,
                                opts_v.hook_seconds, bool(cues), style)).encode()).hexdigest()[:10]
@@ -419,6 +458,9 @@ def _plan_trial(req, settings, clean: MediaInfo, cues, style, work: Path, texts,
     try:
         if variant_path.is_file():
             variant = probe(variant_path)
+        elif opts_v.is_identity:
+            # Already a different edit: post the video as it is (with its subtitles, if any).
+            variant = burn_subtitles(clean, variant_path, cues, style) if cues else clean
         else:
             req.progress("Rendering the zoomed Trial Reel version")
             raw_path = work / f"trial_{sig}_raw.mp4"
@@ -435,19 +477,30 @@ def _plan_trial(req, settings, clean: MediaInfo, cues, style, work: Path, texts,
 
     text = req.trial_caption if req.trial_caption is not None else texts["instagram"]
     adapted = _adapted("instagram", text, "trial_reel", settings)
-    lo, hi = req.trial_delay
     base = parse_iso(req.publish_at) if req.publish_at else utcnow()
-    trial_at = base + timedelta(minutes=random.randint(lo, hi))
+    if req.trial_at:
+        trial_at = parse_iso(req.trial_at)
+    elif main_ig is None:
+        trial_at = base  # on its own: posts when the post does
+    else:
+        lo, hi = req.trial_delay
+        trial_at = base + timedelta(minutes=random.randint(lo, hi))
 
-    main_cover = main_ig.options.get("thumb_offset_ms")
+    main_cover = main_ig.options.get("thumb_offset_ms") if main_ig else req.cover_ms
     duration_ms = int(variant.duration * 1000)
-    cover = int(duration_ms * 0.4) if main_cover is None else (main_cover + duration_ms // 3) % max(duration_ms, 1)
+    if main_cover is None:
+        cover = int(duration_ms * 0.4)
+    elif main_ig is None:
+        cover = main_cover  # your chosen cover frame
+    else:
+        cover = (main_cover + duration_ms // 3) % max(duration_ms, 1)
     opts = {"trial_graduation": req.trial_graduation, "thumb_offset_ms": cover,
             "duration_s": round(variant.duration, 2)}
     if req.audio_name:
         opts["audio_name"] = req.audio_name
+    run_at = iso(trial_at) if (req.trial_at or main_ig is not None or req.publish_at) else None
     trial = add_job("instagram", "trial_reel", [MediaFile(variant.path, "video")], adapted, opts,
-                    extra=sig, run_at=iso(trial_at), depends_on=main_ig.idem_key,
+                    extra=sig, run_at=run_at, depends_on=main_ig.idem_key if main_ig else None,
                     backend=settings.trial_backend_for())
 
     if req.trial_report:

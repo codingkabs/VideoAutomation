@@ -17,6 +17,8 @@ GUIDE_FILE = PLATFORMS_FILE.with_name("platform_guide.yaml")
 TIER1 = ("instagram", "facebook", "tiktok", "youtube", "snapchat")
 POSTABLE_STATUSES = ("implemented", "beta", "handoff")
 DEFAULT_BEST_TIMES = "mon-fri 07:30,12:30,18:00,20:30; sat-sun 10:00,19:30"
+DEFAULT_MAIN_SLOTS = "18:00"
+DEFAULT_TRIAL_SLOTS = "09:00,12:30,21:00"
 COMMENT_MODES = ("off", "mine", "claude")
 
 
@@ -170,6 +172,8 @@ class Settings:
     # Behaviour
     timezone: str = "Europe/London"
     best_times: str = DEFAULT_BEST_TIMES
+    main_slots: str = DEFAULT_MAIN_SLOTS  # --at slot:main picks the next free one
+    trial_slots: str = DEFAULT_TRIAL_SLOTS  # --at slot:trial picks the next free one
     trial_default: bool = False
     trial_delay_minutes: tuple[int, int] = (60, 120)
     trial_graduation: str = "MANUAL"
@@ -311,6 +315,8 @@ class Settings:
             url_ttl_hours=int(g("VAUTO_URL_TTL_HOURS") or 48),
             timezone=g("VAUTO_TIMEZONE") or "Europe/London",
             best_times=g("VAUTO_BEST_TIMES") or DEFAULT_BEST_TIMES,
+            main_slots=g("VAUTO_MAIN_SLOTS") or DEFAULT_MAIN_SLOTS,
+            trial_slots=g("VAUTO_TRIAL_SLOTS") or DEFAULT_TRIAL_SLOTS,
             trial_default=_bool(g("VAUTO_TRIAL_DEFAULT")),
             trial_delay_minutes=_range(g("VAUTO_TRIAL_DELAY"), (60, 120)),
             trial_graduation=graduation,

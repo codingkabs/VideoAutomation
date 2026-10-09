@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from videoautomation import pipeline
+from videoautomation.errors import VautoError
 from videoautomation.media.variants import VariantOptions
 from pathlib import Path
 
@@ -192,3 +193,89 @@ def test_retry_runs_a_failed_job(media_dir, settings, monkeypatch):
     monkeypatch.setattr(service, "publisher_factory", lambda s: (lambda j: RecordingPublisher("meta")))
     result = service.retry(settings, "failedjob")
     assert result.status == "published" and store.get("failedjob1").status == "published"
+
+
+def test_trial_only_skips_the_main_reel(media_dir, settings):
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram", "youtube"], trial_only=True,
+                  variant=VariantOptions(mode="none"))
+    plan = build_plan(req, settings)
+    assert [(j.platform, j.surface) for j in plan.jobs] == [
+        ("youtube", "short"), ("instagram", "trial_reel"), ("instagram", "trial_report")]
+    trial, report = plan.jobs[1], plan.jobs[2]
+    assert trial.depends_on is None and trial.run_at is None  # posts straight away, on its own
+    assert report.depends_on == trial.idem_key
+
+
+def test_trial_only_needs_instagram(media_dir, settings):
+    req = request([media_dir / "landscape.mp4"], platforms=["youtube"], trial_only=True)
+    plan = build_plan(req, settings)
+    assert [j.surface for j in plan.jobs] == ["short"]
+    assert any("Instagram is not in this post" in n for n in plan.notes)
+
+
+def test_trial_only_scheduled_posts_at_the_post_time(media_dir, settings, fake_publishers):
+    from videoautomation.scheduler import iso
+
+    settings.backends["instagram"] = "zernio"
+    settings.trial_backend = "zernio"
+    at = iso(utcnow() + timedelta(hours=2))
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram"], trial_only=True, publish_at=at)
+    plan = build_plan(req, settings)
+    trial = next(j for j in plan.jobs if j.surface == "trial_reel")
+    assert trial.run_at == at
+    results = {r.surface: r.status for r in execute(plan, settings, req)}
+    assert results == {"trial_reel": "published", "trial_report": "queued"}  # Zernio schedules it remotely
+
+
+def test_trial_at_fixes_the_trial_time(media_dir, settings):
+    from videoautomation.scheduler import iso
+
+    at, trial_at = iso(utcnow() + timedelta(hours=1)), iso(utcnow() + timedelta(hours=5))
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram"], trial=True, publish_at=at,
+                  trial_at=trial_at)
+    plan = build_plan(req, settings)
+    main, trial, report = plan.jobs
+    assert trial.run_at == trial_at and trial.depends_on == main.idem_key
+    assert parse_iso(report.run_at) - parse_iso(trial_at) == timedelta(hours=72)
+
+    early = request([media_dir / "landscape.mp4"], platforms=["instagram"], trial=True, publish_at=trial_at,
+                    trial_at=at)
+    with pytest.raises(VautoError, match="after the main post"):
+        build_plan(early, settings)
+
+
+def test_identity_variant_keeps_the_framing(media_dir, settings):
+    req = request([media_dir / "vertical_silent.mp4"], platforms=["instagram"], trial_only=True,
+                  variant=VariantOptions(mode="none"))
+    plan = build_plan(req, settings)
+    trial = next(j for j in plan.jobs if j.surface == "trial_reel")
+    assert not any(Path(plan.work_dir).glob("trial_*_raw.mp4"))  # nothing was zoomed or re-cut
+    assert Path(trial.media[0].path).is_file()
+
+
+def test_claude_remix_fills_trial_caption_and_hook(media_dir, settings, monkeypatch):
+    from videoautomation import captions
+
+    monkeypatch.setattr(captions, "trial_remix", lambda caption, model, key: {
+        "caption": "Nobody tells you this\n#coding", "hook": "Wait for it"})
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram"], trial=True, trial_caption="claude",
+                  variant=VariantOptions(hook_text="claude"))
+    plan = build_plan(req, settings)
+    trial = next(j for j in plan.jobs if j.surface == "trial_reel")
+    assert trial.caption.startswith("Nobody tells you this")
+    assert req.variant.hook_text == "Wait for it"
+
+
+def test_claude_remix_failure_falls_back_to_the_caption(media_dir, settings, monkeypatch):
+    from videoautomation import captions
+
+    def fail(*_):
+        raise VautoError("no key")
+
+    monkeypatch.setattr(captions, "trial_remix", fail)
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram"], trial=True, trial_caption="claude",
+                  variant=VariantOptions(hook_text="claude"))
+    plan = build_plan(req, settings)
+    trial = next(j for j in plan.jobs if j.surface == "trial_reel")
+    assert trial.caption.startswith("Hook line here") and req.variant.hook_text is None
+    assert any("Claude text skipped" in n for n in plan.notes)

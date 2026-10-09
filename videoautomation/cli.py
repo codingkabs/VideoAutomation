@@ -57,23 +57,30 @@ def build_parser() -> argparse.ArgumentParser:
     post.add_argument("--caption-for", action="append", type=_caption_for, default=[], metavar="PLATFORM=TEXT",
                       help="use a different caption on one platform (repeatable)")
     post.add_argument("--rewrite-captions", action="store_true", help="let Claude tailor the caption per platform")
-    post.add_argument("--at", help="when to post: now, best, 18:30, 6pm, tomorrow 9am, +2h, 2026-10-01 18:30")
+    post.add_argument("--at", help="when to post: now, best, slot:main, slot:trial, 18:30, 6pm, tomorrow 9am, +2h, "
+                                   "2026-10-01 18:30")
 
     trial = post.add_argument_group("Instagram Trial Reel")
     trial.add_argument("--trial", dest="trial", action="store_true", default=None,
                        help="also post a zoomed Trial Reel later")
     trial.add_argument("--no-trial", dest="trial", action="store_false")
+    trial.add_argument("--trial-only", action="store_true",
+                       help="Instagram gets only a Trial Reel (no main Reel); other platforms post as usual")
+    trial.add_argument("--trial-at", help="when the Trial Reel posts, e.g. slot:trial or 21:00 (instead of --trial-delay)")
+    trial.add_argument("--trial-preset", choices=["rotate"],
+                       help="rotate: a different remix look each day (zoom, push-in, mirror, speed)")
     trial.add_argument("--trial-delay", type=_minutes, help="minutes after the main post, e.g. 60-120 (random in range)")
-    trial.add_argument("--trial-mode", choices=["static", "push"], default="static",
-                       help="static zoom, or a slow push-in over the clip")
+    trial.add_argument("--trial-mode", choices=["static", "push", "none"], default="static",
+                       help="static zoom, a slow push-in over the clip, or none (keep the framing)")
     trial.add_argument("--trial-zoom", type=float, default=1.15, help="zoom factor, default 1.15")
-    trial.add_argument("--trial-hook", help="text shown at the top for the first seconds")
+    trial.add_argument("--trial-hook", help="text shown at the top for the first seconds (claude: Claude writes it)")
     trial.add_argument("--trial-hook-seconds", type=float, default=3.0)
     trial.add_argument("--trial-mirror", action="store_true", help="flip the video horizontally")
     trial.add_argument("--trial-speed", type=float, default=1.0, help="playback speed, e.g. 1.03")
     trial.add_argument("--trial-graduation", choices=["MANUAL", "SS_PERFORMANCE"],
                        help="MANUAL keeps it trial-only; SS_PERFORMANCE lets Instagram share it if it does well")
-    trial.add_argument("--trial-caption", help="caption for the trial reel (default: the Instagram caption)")
+    trial.add_argument("--trial-caption",
+                       help="caption for the trial reel (default: the Instagram caption; claude: Claude writes it)")
     trial.add_argument("--no-trial-report", dest="trial_report", action="store_false", default=True,
                        help="skip the results check 72 hours later")
 
@@ -238,11 +245,12 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
         if not args.quiet and not args.json:
             print(paint(f"… {message}", "off", colour), file=sys.stderr, flush=True)
 
-    publish_at, when_note = service.resolve_publish_at(settings, args.at, chosen)
+    publish_at, trial_at, when_notes = service.resolve_times(settings, args.at, args.trial_at, chosen, args.dry_run)
     req = service.make_request(
         settings, args.media, caption, platforms,
         caption_overrides=overrides, publish_at=publish_at,
-        trial=args.trial, trial_delay=args.trial_delay, trial_graduation=args.trial_graduation,
+        trial=args.trial, trial_only=args.trial_only, trial_at=trial_at, trial_preset=args.trial_preset,
+        trial_delay=args.trial_delay, trial_graduation=args.trial_graduation,
         trial_caption=args.trial_caption, trial_report=args.trial_report,
         variant=VariantOptions(mode=args.trial_mode, zoom=args.trial_zoom, mirror=args.trial_mirror,
                                speed=args.trial_speed, hook_text=args.trial_hook,
@@ -256,8 +264,7 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
         rewrite_captions=args.rewrite_captions, dry_run=args.dry_run, force=args.force, progress=progress,
     )
     plan, results = service.post(settings, req)
-    if when_note:
-        plan.notes.insert(0, when_note)
+    plan.notes[:0] = when_notes
     if args.json:
         print(results_json(plan.post_id, results, plan.notes))
     else:

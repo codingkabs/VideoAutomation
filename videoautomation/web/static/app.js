@@ -280,13 +280,30 @@ function renderPreviews() {
 
 // ------------------------------------------------------------------ options
 $("#opt-trial").addEventListener("change", (e) => { $("#trial-options").hidden = !e.target.checked; });
+$("#opt-trial-only").addEventListener("change", (e) => { $("#delay-label").hidden = e.target.checked; });
+
+// Today's main: main Reel in the next main slot, a remixed Trial Reel (a new look each day,
+// Claude's caption and hook when a key is set) in the next trial slot after it.
+async function renderTodayMain() {
+  const on = $("#opt-today-main").checked;
+  for (const id of ["#opt-trial", "#opt-when"]) $(id).disabled = on;
+  $("#trial-options").hidden = on || !$("#opt-trial").checked;
+  $("#today-note").textContent = "";
+  updateButtons();
+  if (!on) return;
+  try {
+    const params = new URLSearchParams([...[...state.selected].map((p) => ["p", p]), ["at", "slot:main"], ["trial_at", "slot:trial"]]);
+    $("#today-note").textContent = (await api(`/api/best-time?${params}`)).note;
+  } catch (err) { $("#today-note").textContent = err.message; }
+}
+$("#opt-today-main").addEventListener("change", renderTodayMain);
 $("#opt-zoom").addEventListener("input", (e) => { $("#zoom-value").textContent = `${Number(e.target.value).toFixed(2)}×`; });
 $("#opt-when").addEventListener("change", async (e) => {
   $("#opt-at").hidden = e.target.value !== "custom";
   $("#best-note").textContent = "";
-  if (e.target.value === "best") {
+  if (e.target.value === "best" || e.target.value.startsWith("slot:")) {
     try {
-      const params = new URLSearchParams([...state.selected].map((p) => ["p", p]));
+      const params = new URLSearchParams([...[...state.selected].map((p) => ["p", p]), ["at", e.target.value]]);
       $("#best-note").textContent = (await api(`/api/best-time?${params}`)).note;
     } catch (err) { $("#best-note").textContent = err.message; }
   }
@@ -354,18 +371,29 @@ function renderCommentBox() {
 $("#opt-comment").addEventListener("change", renderCommentBox);
 
 function collectOptions() {
+  if ($("#opt-today-main").checked) {
+    const claude = !!(state.status && state.status.defaults.claude);
+    return { ...baseOptions(null), at: "slot:main", trial: true, trial_only: false, trial_at: "slot:trial",
+      trial_preset: "rotate", trial_hook: $("#opt-hook").value.trim() || (claude ? "claude" : ""),
+      trial_caption: claude ? "claude" : null };
+  }
   const whenMode = $("#opt-when").value;
   let at = null;
-  if (whenMode === "best") at = "best";
+  if (whenMode === "best" || whenMode.startsWith("slot:")) at = whenMode;
   if (whenMode === "custom") {
     const value = $("#opt-at").value;
     if (!value) throw new Error("Pick a date and time");
     at = new Date(value).toISOString();
   }
+  return baseOptions(at);
+}
+
+function baseOptions(at) {
   const subtitles = $("#opt-subtitles").value === "auto" ? "auto" : ($("#opt-subtitles").value === "file" ? state.subtitlePath : null);
   return {
     at, subtitles,
     trial: $("#opt-trial").checked,
+    trial_only: $("#opt-trial").checked && $("#opt-trial-only").checked,
     trial_delay: [Number($("#opt-delay-lo").value), Number($("#opt-delay-hi").value)],
     trial_mode: $("#opt-trial-mode").value,
     trial_zoom: Number($("#opt-zoom").value),
@@ -395,8 +423,9 @@ function updateButtons() {
   const nPost = state.selected.size - nDrafts;
   $("#btn-post").textContent = nDrafts && !nPost ? `Save ${nDrafts} draft${nDrafts === 1 ? "" : "s"}`
     : nDrafts ? `Post ${nPost}, draft ${nDrafts}`
-    : whenMode ? "Schedule" : `Post to ${state.selected.size}`;
-  $("#opt-when").disabled = nDrafts > 0 && !nPost;  // an all-drafts post is saved now; you pick the time later
+    : whenMode || $("#opt-today-main").checked ? "Schedule" : `Post to ${state.selected.size}`;
+  // An all-drafts post is saved now (you pick the time later); Today's main picks its own times.
+  $("#opt-when").disabled = (nDrafts > 0 && !nPost) || $("#opt-today-main").checked;
 }
 $("#opt-when").addEventListener("change", updateButtons);
 $("#opt-drafts").addEventListener("change", updateButtons);

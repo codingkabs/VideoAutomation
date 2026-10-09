@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import threading
+import time as clock
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,13 +15,68 @@ from .media.variants import VariantOptions
 from .models import PostJob, PostResult
 from .pipeline import PostPlan, PostRequest, build_plan, execute
 from .publishers import make_publisher
-from .scheduler import JobStore, iso, run_job, utcnow
+from .scheduler import JobStore, iso, parse_iso, run_job, utcnow
 from .storage import make_storage
+
+SLOT_SETTINGS = {"main": ("main_slots", "VAUTO_MAIN_SLOTS"), "trial": ("trial_slots", "VAUTO_TRIAL_SLOTS")}
+SLOT_HOLD_SECONDS = 1800  # a slot just handed out stays taken while its post renders
+_held_slots: dict[str, float] = {}  # ISO time -> when the hold ends
+_slot_lock = threading.Lock()
+
+
+def slot_time(settings: Settings, kind: str, after: datetime | None = None, now: datetime | None = None,
+              reserve: bool = False) -> datetime:
+    """Next free main or trial posting slot (after ``after`` when given). ``reserve`` holds it
+    for a while, so two posts sent a moment apart don't both take it before either is queued."""
+    if kind not in SLOT_SETTINGS:
+        raise ConfigError(f"Unknown slot {kind!r}; use slot:main or slot:trial")
+    attr, name = SLOT_SETTINGS[kind]
+    now = now or utcnow()
+    start = max(now, after) if after else now
+    with _slot_lock:
+        expired = clock.time()
+        for key in [k for k, until in _held_slots.items() if until < expired]:
+            del _held_slots[key]
+        since = iso(now - timedelta(days=1))
+        taken = [parse_iso(r.run_at) for r in JobStore(settings.db_path).reel_rows(since)]
+        taken += [parse_iso(t) for t in _held_slots]
+        when = timing.free_slot(timing.parse_slots(getattr(settings, attr), name), start,
+                                timing.zone(settings), taken, name)
+        if reserve:
+            _held_slots[iso(when)] = clock.time() + SLOT_HOLD_SECONDS
+    return when
+
+
+def day_slots(settings: Settings, day: date) -> list[dict[str, Any]]:
+    """The main and trial slots of ``day`` (local), each with the Instagram Reel that holds it."""
+    tz = timing.zone(settings)
+    start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    rows = JobStore(settings.db_path).reel_rows(iso(start - timing.SLOT_GAP)) if settings.db_path.is_file() else []
+    out = []
+    for kind, (attr, name) in SLOT_SETTINGS.items():
+        for t in timing.parse_slots(getattr(settings, attr), name).get(day.weekday(), []):
+            when = datetime.combine(day, t, tzinfo=tz).astimezone(timezone.utc)
+            holder = next((r for r in rows if abs(parse_iso(r.run_at) - when) < timing.SLOT_GAP), None)
+            out.append({
+                "kind": kind, "time": iso(when), "local": t.strftime("%H:%M"),
+                "taken_by": None if holder is None else {
+                    "id": holder.idem_key[:10], "post_id": holder.job.post_id, "surface": holder.job.surface,
+                    "status": holder.status, "run_at": holder.run_at,
+                    "url": holder.result.url if holder.result else None},
+            })
+    return sorted(out, key=lambda s: s["time"])
 
 
 def resolve_publish_at(settings: Settings, at: str | None, platforms: list[str],
-                       now: datetime | None = None) -> tuple[str | None, str | None]:
-    """Turn an --at value into (ISO UTC time or None for now, human note)."""
+                       now: datetime | None = None, after: str | None = None,
+                       reserve: bool = False) -> tuple[str | None, str | None]:
+    """Turn an --at value into (ISO UTC time or None for now, human note).
+    ``after`` (ISO) makes a slot come after that time; ``reserve`` holds a slot (real posts only)."""
+    if at and at.strip().lower().startswith("slot:"):
+        kind = at.strip().lower().split(":", 1)[1]
+        when = slot_time(settings, kind, parse_iso(after) if after else None, now, reserve)
+        local = when.astimezone(timing.zone(settings)).strftime("%a %d %b %H:%M %Z")
+        return iso(when), f"{kind} slot: {local}"
     if at and at.strip().lower() == "best":
         hours: list[tuple[int, int]] = []
         zernio_platforms = [p for p in platforms if settings.backends.get(p) == "zernio"]
@@ -38,6 +95,21 @@ def resolve_publish_at(settings: Settings, at: str | None, platforms: list[str],
     return iso(when), f"scheduled for {local}"
 
 
+def resolve_times(settings: Settings, at: str | None, trial_at: str | None, platforms: list[str],
+                  dry_run: bool = False) -> tuple[str | None, str | None, list[str]]:
+    """Resolve the post time and the Trial Reel time (which comes after the post).
+    Returns (publish_at, trial_at, notes); real posts hold the slots they get."""
+    publish_at, note = resolve_publish_at(settings, at, platforms, reserve=not dry_run)
+    notes = [note] if note else []
+    trial_iso = None
+    if trial_at:
+        trial_iso, _ = resolve_publish_at(settings, trial_at, ["instagram"], after=publish_at, reserve=not dry_run)
+        if trial_iso:
+            local = parse_iso(trial_iso).astimezone(timing.zone(settings)).strftime("%a %d %b %H:%M %Z")
+            notes.append(f"Trial Reel at {local}")
+    return publish_at, trial_iso, notes
+
+
 def make_request(settings: Settings, inputs: list[Path], caption: str, platforms: list[str] | None = None,
                  **opts: Any) -> PostRequest:
     """Build a PostRequest with the user's defaults filled in."""
@@ -46,6 +118,10 @@ def make_request(settings: Settings, inputs: list[Path], caption: str, platforms
     if unknown:
         raise ConfigError(f"No posting route for: {', '.join(unknown)}. See `vauto platforms`.")
     variant = opts.pop("variant", None) or VariantOptions(font_path=settings.font_path)
+    if opts.pop("trial_preset", None) == "rotate":
+        variant.apply_preset(datetime.now(timing.zone(settings)).date())
+    if opts.get("trial_only"):
+        opts["trial"] = True
     if opts.get("trial") is None:
         opts["trial"] = settings.trial_default
     if opts.get("drafts") is None:

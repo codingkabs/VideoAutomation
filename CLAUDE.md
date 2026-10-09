@@ -13,7 +13,9 @@
 
 Flags worth knowing:
 - `-p instagram,tiktok,x` picks platforms (default: VAUTO_PLATFORMS). `vauto platforms` lists them all.
-- `--trial` adds the delayed, zoomed Instagram Trial Reel; `--trial-hook "text"` adds hook text.
+- `--trial` adds the delayed, zoomed Instagram Trial Reel; `--trial-hook "text"` adds hook text (`claude` lets Claude write it, and the same for `--trial-caption`).
+- `--trial-only` posts Instagram as a Trial Reel alone (no main Reel); `--trial-mode none` skips the zoom for videos that are already a different edit.
+- `--at slot:main|slot:trial` picks the next free slot from VAUTO_MAIN_SLOTS / VAUTO_TRIAL_SLOTS; `--trial-at slot:trial` puts the Trial Reel in its own slot; `--trial-preset rotate` changes the remix look each day. "Today's main" in the app sets all three.
 - `--tiktok-draft` sends TikTok to drafts so the user can add a trending sound.
 - `--first-comment "text"` (or `claude`, or `off`) posts a first comment on Instagram, Facebook, YouTube and LinkedIn; TikTok has none.
 - `--draft-only instagram` drafts just those platforms and publishes the rest.

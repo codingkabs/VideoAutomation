@@ -125,3 +125,60 @@ def test_env_example_loads_as_is(tmp_path):
     s = Settings.from_env(env={"VAUTO_HOME": str(tmp_path)}, dotenv=env)
     assert s.default_platforms == ["instagram", "facebook", "tiktok", "youtube", "snapchat"]
     assert s.trial_delay_minutes == (60, 120) and s.telegram_allowed_user_ids == []
+
+
+def test_slots_without_days_apply_every_day():
+    slots = timing.parse_slots("09:00, 12:30,21:00", "VAUTO_TRIAL_SLOTS")
+    assert all([t.strftime("%H:%M") for t in slots[d]] == ["09:00", "12:30", "21:00"] for d in range(7))
+    with pytest.raises(ConfigError, match="VAUTO_TRIAL_SLOTS"):
+        timing.parse_slots("someday 09:00", "VAUTO_TRIAL_SLOTS")
+
+
+def test_free_slot_skips_taken_and_rolls_over(s):
+    tz = timing.zone(s)
+    slots = timing.parse_slots("09:00,12:30,21:00")
+    taken = [datetime(2026, 9, 27, 20, 10, tzinfo=timezone.utc)]  # 21:10 London holds the 21:00 slot
+    when = timing.free_slot(slots, NOW, tz, taken)
+    assert london(when).strftime("%a %H:%M") == "Mon 09:00"
+    assert london(timing.free_slot(slots, NOW, tz, [])).strftime("%a %H:%M") == "Sun 21:00"
+
+
+def test_slot_times_from_the_queue(s):
+    from videoautomation import service
+    from videoautomation.models import MediaFile, PostJob
+    from videoautomation.scheduler import JobStore, iso, parse_iso
+
+    service._held_slots.clear()
+    now = datetime(2026, 9, 28, 7, 0, tzinfo=timezone.utc)  # Monday 08:00 London
+    first = service.slot_time(s, "trial", now=now)
+    assert london(first).strftime("%H:%M") == "09:00"
+
+    job = PostJob("instagram", "trial_reel", "zernio", [MediaFile("x.mp4", "video")], "c",
+                  post_id="p1", idem_key="k1", run_at=iso(first))
+    JobStore(s.db_path).insert(job, status="pending")
+    assert london(service.slot_time(s, "trial", now=now)).strftime("%H:%M") == "12:30"
+    # A slot handed to a real post is held while it renders, even before it is queued.
+    held = service.slot_time(s, "trial", now=now, reserve=True)
+    assert london(held).strftime("%H:%M") == "12:30"
+    assert london(service.slot_time(s, "trial", now=now)).strftime("%H:%M") == "21:00"
+    # A main post's trial comes after the main post.
+    main, trial, notes = service.resolve_times(s, "slot:main", "slot:trial", ["instagram"], dry_run=True)
+    assert parse_iso(trial) > parse_iso(main) and len(notes) == 2
+    service._held_slots.clear()
+
+
+def test_day_slots_show_what_holds_each(s):
+    from datetime import date
+
+    from videoautomation import service
+    from videoautomation.models import MediaFile, PostJob
+    from videoautomation.scheduler import JobStore, iso
+
+    tz = timing.zone(s)
+    at = datetime(2026, 9, 28, 12, 30, tzinfo=tz)
+    JobStore(s.db_path).insert(PostJob("instagram", "trial_reel", "zernio", [MediaFile("x.mp4", "video")], "c",
+                                       post_id="p1", idem_key="k1", run_at=iso(at)), status="pending")
+    day = service.day_slots(s, date(2026, 9, 28))
+    assert [(d["kind"], d["local"]) for d in day] == [("trial", "09:00"), ("trial", "12:30"), ("main", "18:00"),
+                                                      ("trial", "21:00")]
+    assert day[1]["taken_by"]["post_id"] == "p1" and day[0]["taken_by"] is None

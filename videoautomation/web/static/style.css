@@ -302,6 +302,12 @@ a.link { display: inline-flex; align-items: center; }
 .numgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .5rem; }
 .pactions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; padding-top: .7rem; }
 .upcoming { display: grid; gap: .5rem; }
+.slots { display: grid; }
+.srow { display: grid; grid-template-columns: 3.2rem auto 1fr auto; gap: .6rem; align-items: center; font-size: .88rem;
+  padding: .45rem 0; border-bottom: 1px solid var(--line); min-height: 44px; }
+.srow:last-child { border-bottom: 0; }
+.srow .stime { font-variant-numeric: tabular-nums; font-weight: 700; }
+.srow.past .stime, .srow.past .swhat { color: var(--muted); }
 .urow { display: grid; grid-template-columns: 40px 1fr auto; gap: .7rem; align-items: center; font-size: .88rem;
   padding: .3rem 0; border-bottom: 1px solid var(--line); }
 .urow:last-child { border-bottom: 0; }

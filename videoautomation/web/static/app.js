@@ -592,6 +592,59 @@ async function loadPosts(append = false) {
   postsState.offset += data.posts.length;
   $("#posts-more").hidden = postsState.offset >= data.total;
   loadUpcoming();
+  loadSlots();
+}
+
+// Today's main + Trial Reel slots: what holds each, and a quick way to fill a free one.
+async function loadSlots() {
+  let day;
+  const now = Date.now();
+  try {
+    day = await api("/api/slots");
+    if (day.slots.every((s) => new Date(s.time).getTime() <= now)) {
+      // Today is over: plan tomorrow instead.
+      const next = new Date(`${day.date}T12:00:00`);
+      next.setDate(next.getDate() + 1);
+      day = await api(`/api/slots?date=${next.toISOString().slice(0, 10)}`);
+      day.tomorrow = true;
+    }
+  } catch { return; }
+  const free = day.slots.filter((s) => !s.taken_by && new Date(s.time).getTime() > now).length;
+  $("#slots-card").hidden = !day.slots.length;
+  $("#slots-card h2").textContent = day.tomorrow ? "Tomorrow's slots" : "Today's slots";
+  $("#slots-count").textContent = `${day.slots.length - free} of ${day.slots.length} filled`;
+  $("#slots-list").replaceChildren(...day.slots.map((s) => {
+    const held = s.taken_by;
+    const past = !held && new Date(s.time).getTime() <= now;
+    const what = held ? `${held.surface === "trial_reel" ? "Trial Reel" : "Reel"} · ${(STATUS[held.status] || [held.status])[0]}`
+      : past ? "Missed" : "Free";
+    const action = held ? el("button", { class: "link", onclick: () => openPost(held.post_id) }, "Manage")
+      : past ? el("span") : el("button", { class: "link", onclick: () => fillSlot(s.kind) }, "Fill");
+    return el("div", { class: `srow${past ? " past" : ""}` },
+      el("span", { class: "stime" }, s.local),
+      el("span", { class: `badge ${s.kind === "main" ? "info" : "warn"}` }, s.kind === "main" ? "Main" : "Trial"),
+      el("span", { class: "swhat" }, what), action);
+  }));
+}
+
+// Open the Post screen set up for a slot: Today's main, or a Trial Reel on its own.
+function fillSlot(kind) {
+  showTab("post");
+  if (kind === "main") {
+    $("#opt-today-main").checked = true;
+    renderTodayMain();
+  } else {
+    $("#opt-today-main").checked = false;
+    $("#opt-trial").checked = true;
+    $("#opt-trial-only").checked = true;
+    $("#trial-options").hidden = false;
+    $("#delay-label").hidden = true;
+    renderTodayMain();
+    $("#opt-when").value = "slot:trial";
+    $("#opt-when").dispatchEvent(new Event("change"));
+  }
+  toast(kind === "main" ? "Add your video and caption: it goes out as today's main with a remixed Trial Reel"
+    : "Add a video and caption: it goes out as a Trial Reel in the next free trial slot");
 }
 
 function statusDot(status) {

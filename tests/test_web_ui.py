@@ -197,3 +197,22 @@ def test_post_link_opens_it_in_my_posts(page):
     assert item.get_by_role("button", name="Cancel").count() >= 1
     assert page.url.endswith("#posts") and "post=" not in page.url
     assert not page.errors
+
+
+def test_slots_card_fills_a_trial_slot(page):
+    page.click("[data-tab='posts']")
+    page.wait_for_selector("#slots-card:not([hidden]) .srow")
+    assert page.locator("#slots-list .srow").count() == 4
+    heading = page.inner_text("#slots-card h2")
+    assert heading in ("Today's slots", "Tomorrow's slots")
+    trial_fill = page.locator(".srow", has=page.locator(".badge", has_text="Trial")).get_by_role("button", name="Fill").first
+    trial_fill.click()
+    page.wait_for_selector("#tab-post.active")
+    assert page.is_checked("#opt-trial-only") and page.input_value("#opt-when") == "slot:trial"
+    opts = page.evaluate("collectOptions()")
+    assert opts["trial_only"] is True and opts["at"] == "slot:trial"
+    page.click("[data-tab='posts']")
+    page.locator(".srow", has=page.locator(".badge", has_text="Main")).get_by_role("button", name="Fill").first.click()
+    page.wait_for_selector("#tab-post.active")
+    assert page.is_checked("#opt-today-main") and page.evaluate("collectOptions()")["at"] == "slot:main"
+    assert not page.errors

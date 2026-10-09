@@ -279,3 +279,23 @@ def test_claude_remix_failure_falls_back_to_the_caption(media_dir, settings, mon
     trial = next(j for j in plan.jobs if j.surface == "trial_reel")
     assert trial.caption.startswith("Hook line here") and req.variant.hook_text is None
     assert any("Claude text skipped" in n for n in plan.notes)
+
+
+def test_local_queue_keeps_zernio_posts_cancellable(media_dir, settings, fake_publishers):
+    from videoautomation import service
+    from videoautomation.scheduler import iso
+
+    settings.backends["instagram"] = "zernio"
+    settings.trial_backend = "zernio"
+    at = iso(utcnow() + timedelta(hours=2))
+    req = request([media_dir / "landscape.mp4"], platforms=["instagram", "youtube"], trial_only=True,
+                  publish_at=at, local_queue=True)
+    plan = build_plan(req, settings)
+    results = {(r.platform, r.surface): r.status for r in execute(plan, settings, req)}
+    assert results == {("youtube", "short"): "queued", ("instagram", "trial_reel"): "queued",
+                       ("instagram", "trial_report"): "queued"}
+    assert not fake_publishers.get(("zernio", "instagram")) or not fake_publishers[("zernio", "instagram")].jobs
+    cancelled = service.cancel_post(settings, plan.post_id)
+    assert {r.surface for r in cancelled} == {"short", "trial_reel", "trial_report"}
+    with pytest.raises(VautoError, match="Nothing of this post"):
+        service.cancel_post(settings, plan.post_id)

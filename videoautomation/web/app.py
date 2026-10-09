@@ -386,6 +386,7 @@ def create_app(settings: Settings):
             fit=o.get("fit") or "auto", allow_trim=bool(o.get("trim")),
             subtitles=subtitles, subtitle_style=o.get("subtitle_style") or None,
             rewrite_captions=bool(o.get("rewrite")), dry_run=dry_run, force=bool(o.get("force")),
+            local_queue=bool(o.get("local_queue")),
             progress=progress,
         )
         return req, note
@@ -516,6 +517,12 @@ def create_app(settings: Settings):
 
         days = int((request.get_json() or {}).get("days") or 30)
         return jsonify({"task_id": background("refresh", lambda _p: refresh(cfg(), tracker(), days=days).to_dict())})
+
+    @app.post("/api/posts/<post_id>/cancel")
+    def cancel_post(post_id: str):
+        """Cancel everything of a post still waiting in the queue."""
+        results = service.cancel_post(cfg(), secure_filename(post_id))
+        return jsonify({"results": [r.to_dict() for r in results]})
 
     @app.post("/api/posts/<post_id>/publish")
     def publish_post_drafts(post_id: str):

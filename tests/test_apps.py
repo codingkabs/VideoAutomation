@@ -283,6 +283,11 @@ def test_web_trial_only_in_a_trial_slot(client, media_dir):
     assert all(j["run_at"] for j in result["jobs"]) and result["notes"][0].startswith("trial slot:")
 
 
+def test_web_cancel_post_reports_nothing_waiting(client):
+    r = client.post("/api/posts/abc123/cancel", json={})
+    assert r.status_code == 400 and "Nothing of this post" in r.get_json()["error"]
+
+
 def test_web_slots_and_slot_times(client):
     day = client.get("/api/slots?date=2026-10-12").get_json()
     assert day["date"] == "2026-10-12"

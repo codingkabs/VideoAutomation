@@ -368,6 +368,7 @@ Set the day's times once: `VAUTO_MAIN_SLOTS` (default `18:00`) and `VAUTO_TRIAL_
 - **Today's main** in the app (or `--at slot:main --trial --trial-at slot:trial --trial-preset rotate`) posts your video in the next main slot and a remixed Trial Reel in the next trial slot after it. The remix gets a different look each day (zoom, push-in, mirror, slight speed-up), and Claude's caption and hook when a key is set.
 - Other Trial Reels (for example from your own video-making pipeline) use `--trial-only --at slot:trial` and fill the remaining trial slots.
 - `GET /api/slots?date=2026-10-09` lists the day's slots and what holds each one.
+- Posts routed through Zernio are normally scheduled on Zernio's side. Add `--local-queue` (`local_queue` in the API) to keep them in vauto's queue instead, so `vauto jobs --cancel` or `POST /api/posts/<post_id>/cancel` can stop them until their time; `vauto worker` sends them.
 
 ---
 

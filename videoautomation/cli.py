@@ -57,6 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
     post.add_argument("--caption-for", action="append", type=_caption_for, default=[], metavar="PLATFORM=TEXT",
                       help="use a different caption on one platform (repeatable)")
     post.add_argument("--rewrite-captions", action="store_true", help="let Claude tailor the caption per platform")
+    post.add_argument("--local-queue", action="store_true",
+                      help="keep a scheduled post in vauto's queue (needs `vauto worker`) so `vauto jobs --cancel` works until then")
     post.add_argument("--at", help="when to post: now, best, slot:main, slot:trial, 18:30, 6pm, tomorrow 9am, +2h, "
                                    "2026-10-01 18:30")
 
@@ -262,6 +264,7 @@ def cmd_post(args: argparse.Namespace, settings: Settings) -> int:
         audio=args.audio, slide_seconds=args.slide_seconds, cover_ms=args.cover_ms, audio_name=args.audio_name,
         subtitles=args.subtitles, subtitle_style=args.subtitle_style,
         rewrite_captions=args.rewrite_captions, dry_run=args.dry_run, force=args.force, progress=progress,
+        local_queue=args.local_queue,
     )
     plan, results = service.post(settings, req)
     plan.notes[:0] = when_notes

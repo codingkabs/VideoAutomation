@@ -77,6 +77,7 @@ class PostRequest:
     rewrite_captions: bool = False
     dry_run: bool = False
     force: bool = False
+    local_queue: bool = False  # keep scheduled jobs in vauto's queue (not Zernio's), so they can be cancelled
     progress: Progress = field(default=_quiet, repr=False, compare=False)
 
 
@@ -630,7 +631,7 @@ def execute(plan: PostPlan, settings: Settings, req: PostRequest) -> list[PostRe
                                       error="skipped because the post it follows did not go out"))
             continue
         parent_waiting = parent is not None and parent.status in ("pending", "running")
-        if publisher.schedules_remotely(job) and not parent_waiting:
+        if publisher.schedules_remotely(job) and not parent_waiting and not req.local_queue:
             store.insert(job, status="running")
             results.append(run_job(store, job, publisher_for))
         else:

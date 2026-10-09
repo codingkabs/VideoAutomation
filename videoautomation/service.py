@@ -172,6 +172,20 @@ def cancel(settings: Settings, key_prefix: str) -> PostResult:
     return result
 
 
+def cancel_post(settings: Settings, post_id: str) -> list[PostResult]:
+    """Cancel every job of a post still waiting in vauto's queue (its Trial Reel, results check, ...)."""
+    store = JobStore(settings.db_path)
+    rows = [r for r in store.rows(post_id=post_id, limit=1000) if r.status == "pending"]
+    if not rows:
+        raise VautoError("Nothing of this post is waiting in the queue (it may have gone out already)")
+    results = []
+    for row in rows:
+        result = PostResult(row.job.platform, row.job.surface, "skipped", error="cancelled by you")
+        store.finish(row.idem_key, result)
+        results.append(result)
+    return results
+
+
 def retry(settings: Settings, key_prefix: str) -> PostResult:
     store = JobStore(settings.db_path)
     row = find(store, key_prefix)

@@ -1023,32 +1023,54 @@ function renderHashtags(s) {
     el("tbody", {}, s.hashtags.map((h) => el("tr", {}, el("td", {}, h.tag), el("td", { class: "num" }, h.posts), el("td", { class: "num" }, num(h.avg_views)))))));
 }
 
+const VERDICT = {
+  winner: ["Winner", "ok"], average: ["About usual", "info"], below: ["Below usual", "bad"],
+  early: ["First day", "warn"], no_history: ["New", "info"], no_numbers: ["No numbers yet", ""],
+  waiting: ["Not out yet", ""],
+};
+
 async function loadTrials() {
   const box = $("#trials-list");
-  let items;
-  try { items = await api("/api/trials"); } catch (err) { box.replaceChildren(emptyChart(err.message)); return; }
-  if (!items.length) { box.replaceChildren(emptyChart("No Trial Reels yet. Tick “Instagram Trial Reel” when you post a video.")); return; }
-  box.replaceChildren(el("div", { class: "legend-row" },
-      el("span", {}, el("i", { class: "sw s1" }), "Main reel"), el("span", {}, el("i", { class: "sw s2" }), "Trial reel")),
-    ...items.map((t) => {
-    const keys = ["views", "reach", "likes", "comments", "shares", "saved"].filter((k) => (t.main || {})[k] !== undefined || (t.trial || {})[k] !== undefined);
-    const bars = keys.length ? el("div", { class: "tbars" }, keys.map((k) => {
-      const a = (t.main || {})[k] || 0, b = (t.trial || {})[k] || 0, max = Math.max(a, b, 1);
-      const pair = el("div", { class: "tbar-pair" },
-        el("div", { class: "tbar" }, el("div", { class: "tbar-fill s1", style: `width:${(a / max) * 100}%` }), el("span", {}, num(a))),
-        el("div", { class: "tbar" }, el("div", { class: "tbar-fill s2", style: `width:${(b / max) * 100}%` }), el("span", {}, num(b))));
-      attachTip(pair, [k, `main ${num(a)}`, `trial ${num(b)}`]);
-      return [el("span", { class: "tbar-label" }, k), pair];
-    })) : null;
+  let data;
+  try { data = await api("/api/trial-results"); } catch (err) { box.replaceChildren(emptyChart(err.message)); return; }
+  if (!data.trials.length) {
+    box.replaceChildren(emptyChart("No Trial Reels yet. Tick “Instagram Trial Reel” (or Today's main) when you post a video."));
+    return;
+  }
+  const base = data.baseline;
+  const head = el("p", { class: "muted small" }, base
+    ? `Your usual trial: ${num(base.views)} views, ${base.engage_per_1k.toFixed(1)} shares+saves per 1K views (from ${base.trials} trials). A winner beats it by 1.5×.`
+    : "Each trial is compared with your usual trial once 3 of them have numbers after a day.");
+  box.replaceChildren(head, ...data.trials.map((t) => {
+    const [label, tone] = VERDICT[t.verdict] || [t.verdict, ""];
+    const width = t.views_x ? Math.min(t.views_x / 3, 1) * 100 : 0;
+    const main = !t.standalone && t.main_metrics && t.main_metrics.views ? `Main Reel: ${num(t.main_metrics.views)} views` : null;
     return el("div", { class: "trial" },
-      el("div", { class: "row card-head" }, el("b", {}, `Post ${t.post_id}`),
-        t.winner ? el("span", { class: `badge ${t.winner === "trial" ? "ok" : "info"}` }, `${t.winner} wins`) : null),
-      el("div", { class: "small" },
-        t.main_url ? el("a", { href: t.main_url, target: "_blank", rel: "noopener" }, "Main reel ↗") : null, " ",
-        t.trial_url ? el("a", { href: t.trial_url, target: "_blank", rel: "noopener" }, "Trial reel ↗") : null),
-      bars,
-      (t.notes || []).length ? el("ul", { class: "notes" }, t.notes.map((n) => el("li", {}, n))) : null);
+      el("div", { class: "row card-head" },
+        el("b", { class: "tcap" }, t.caption || `Post ${t.post_id}`),
+        el("span", { class: `badge ${tone}` }, label)),
+      el("div", { class: "small muted" }, `${when(t.run_at)} · ${t.summary}`),
+      t.views_x ? el("div", { class: "tmeter", title: `${t.views_x.toFixed(1)}× your usual views` },
+        el("div", { class: `tmeter-fill ${tone}`, style: `width:${width}%` }),
+        el("div", { class: "tmeter-mark", style: "left:33.3%" })) : null,
+      main ? el("div", { class: "small muted" }, main) : null,
+      el("div", { class: "small tlinks" },
+        t.url ? el("a", { href: t.url, target: "_blank", rel: "noopener" }, "On Instagram ↗") : null,
+        t.verdict === "winner" || t.verdict === "average"
+          ? el("button", { class: "link", onclick: () => postAsMain(t.post_id) }, "Post as main") : null),
+      t.verdict === "winner" ? el("div", { class: "small" },
+        "Share it with your followers from Instagram: Profile → Reels → Trials → Share. Or post it as a fresh main Reel.") : null);
   }));
+}
+
+// Load a post's video into the Post screen as today's main (e.g. a Trial Reel that won).
+async function postAsMain(postId) {
+  await postAgain(postId);
+  if (!state.upload) return;
+  $("#opt-force").checked = false;
+  $("#opt-today-main").checked = true;
+  renderTodayMain();
+  toast("Loaded as Today's main: check the caption, then Schedule");
 }
 
 $$("#tab-stats .seg button").forEach((b) => b.addEventListener("click", () => {
@@ -1256,6 +1278,13 @@ loadSnippets();
 loadStatus().then(async () => {
   await loadSharedUpload();
   updateButtons();
+  // ?reuse=ID (from the Telegram briefing) loads a winning Trial Reel as today's main.
+  const reuse = new URLSearchParams(location.search).get("reuse");
+  if (reuse) {
+    history.replaceState(null, "", location.pathname + "#post");
+    await postAsMain(reuse);
+    return;
+  }
   // ?post=ID opens that post in My posts (links from Telegram, e.g. to cancel a queued Trial Reel).
   const linked = new URLSearchParams(location.search).get("post");
   if (linked) {

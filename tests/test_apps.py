@@ -78,7 +78,8 @@ def test_standalone_trial_reports_its_own_numbers(settings, monkeypatch):
     job = PostJob("instagram", "trial_report", "insights", [], "", options={"trial_key": "trial1"})
     result = insights.InsightsPublisher(settings, session=FakeSession({})).publish(job)
     assert not any("main reel" in line for line in result.notes)
-    assert any(line.startswith("views") and "4200" in line for line in result.notes)
+    assert result.notes[0].startswith("4.2K views")  # judged against your usual trial once there are 3
+    assert any("Not enough past trials" in line for line in result.notes)
     assert "Nobody tells you this" in sent[0] and "u2" in sent[0]
 
 

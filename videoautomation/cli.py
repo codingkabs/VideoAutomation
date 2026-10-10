@@ -151,8 +151,10 @@ def build_parser() -> argparse.ArgumentParser:
     export = sub.add_parser("export", help="save your post history and numbers as a CSV spreadsheet")
     export.add_argument("output", type=Path, nargs="?", default=Path("vauto-posts.csv"))
 
-    trials = sub.add_parser("trials", help="compare Trial Reels with their main Reels")
-    trials.add_argument("--limit", type=int, default=5)
+    trials = sub.add_parser("trials", help="how your Trial Reels did against your usual trial")
+    trials.add_argument("--limit", type=int, default=10)
+    trials.add_argument("--live", action="store_true",
+                        help="fetch fresh numbers from Instagram and compare each trial with its main Reel")
 
     plats = sub.add_parser("platforms", help="list every platform, or show how one works: vauto platforms tiktok")
     plats.add_argument("name", nargs="?", help="one platform, for its guide, limits and setup")
@@ -335,12 +337,28 @@ def cmd_jobs(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def cmd_trials(args: argparse.Namespace, settings: Settings) -> int:
+    from . import trials
     from .insights import compare, trial_keys
 
     if not settings.db_path.is_file():
         print("No Trial Reels yet.")
         return 0
     store = JobStore(settings.db_path)
+    if not args.live:  # saved numbers only: no calls to Instagram
+        results = trials.collect(store, limit=args.limit)
+        base = trials.baseline(results)
+        if not results:
+            print("No Trial Reels yet.")
+        elif base:
+            print(f"Your usual trial: {trials.compact(base['views'])} views, "
+                  f"{base['engage_per_1k']:.1f} shares+saves per 1K views ({base['trials']} trials)\n")
+        from .scheduler import parse_iso
+
+        for r in results:
+            when = parse_iso(r.run_at).astimezone(zone(settings)).strftime("%a %d %b %H:%M")
+            print(f"{r.verdict.replace('_', ' '):<11} {r.caption[:60]}  ({when})")
+            print(f"            {trials.describe(r, base)}{'  ' + r.url if r.url else ''}")
+        return 0
     keys = trial_keys(store, args.limit)
     if not keys:
         print("No Trial Reels yet.")

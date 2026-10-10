@@ -177,11 +177,32 @@ class InsightsPublisher(Publisher):
 
     def publish(self, job: PostJob) -> PostResult:
         store = JobStore(self.settings.db_path)
-        comparison = compare(self.settings, store, job.options["trial_key"], self.session)
+        trial_key = job.options["trial_key"]
+        comparison = compare(self.settings, store, trial_key, self.session)
+        lines = comparison.lines()
+        if comparison.trial:
+            from .tracker import Tracker
+
+            Tracker(store).add_stats(trial_key, comparison.trial, source="trial report")  # grows "your usual trial"
         if comparison.standalone:
             head = ["📊 Trial Reel results", comparison.caption, comparison.trial_url or ""]
+            lines = self._against_usual(store, trial_key) or lines
         else:
             head = ["📊 Trial Reel results", comparison.main_url or ""]
-        text = "\n".join([*filter(None, head), *comparison.lines()])
+        text = "\n".join([*filter(None, head), *lines])
         notify.send(self.settings, text, self.session)
-        return PostResult(job.platform, job.surface, "reported", notes=comparison.lines())
+        return PostResult(job.platform, job.surface, "reported", notes=lines)
+
+    def _against_usual(self, store: JobStore, trial_key: str) -> list[str]:
+        """A Trial Reel posted on its own is judged against your usual trial."""
+        from . import trials
+
+        results = trials.collect(store)
+        result = next((r for r in results if r.key == trial_key), None)
+        if result is None or not result.metrics:
+            return []
+        base = trials.baseline(results, exclude=trial_key)
+        public = (self.settings.env.get("VAUTO_PUBLIC_URL") or "").rstrip("/") or None
+        icon = {"winner": "🏆 ", "below": "▫️ "}.get(result.verdict, "")
+        lines = trials.verdict_lines(result, base, public)
+        return [icon + lines[0], *lines[1:]]

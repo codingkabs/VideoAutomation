@@ -216,3 +216,45 @@ def test_slots_card_fills_a_trial_slot(page):
     page.wait_for_selector("#tab-post.active")
     assert page.is_checked("#opt-today-main") and page.evaluate("collectOptions()")["at"] == "slot:main"
     assert not page.errors
+
+
+def _seed_trials(settings, media_dir):
+    """Four usual Trial Reels and one winner whose video vauto still has."""
+    import shutil
+
+    tr = Tracker.open(settings)
+    now = utcnow()
+    for i, (key, views) in enumerate((("u1", 5000), ("u2", 5200), ("u3", 4800), ("u4", 5000), ("win", 14000))):
+        caption = "JavaScript runtimes explained" if key == "win" else f"Usual trial {i}"
+        job = PostJob("instagram", "trial_reel", "zernio", [MediaFile("/x.mp4", "video")], caption,
+                      idem_key=key, post_id=f"p_{key}", run_at=iso(now - timedelta(hours=40 + i)))
+        tr.store.insert(job, "running")
+        tr.store.finish(key, PostResult("instagram", "trial_reel", "published", url=f"https://instagram.com/reel/{key}"))
+        tr.add_stats(key, {"views": views, "shares": 10, "saved": 5})
+    work = settings.renders_dir / "p_win"
+    work.mkdir(parents=True, exist_ok=True)
+    shutil.copy(media_dir / "vertical_silent.mp4", work / "master_auto.mp4")
+
+
+def test_trials_card_judges_and_posts_a_winner_as_main(page, settings, media_dir):
+    _seed_trials(settings, media_dir)
+    page.click("[data-tab='stats']")
+    page.wait_for_selector("#trials-list .trial")
+    winner = page.locator(".trial", has_text="JavaScript runtimes explained")
+    assert "winner" in winner.inner_text().lower() and "your usual" in winner.inner_text()
+    assert "Your usual trial" in page.inner_text("#trials-list")
+    winner.get_by_role("button", name="Post as main").click()
+    page.wait_for_selector("#tab-post.active")
+    page.wait_for_function("document.querySelector('#today-note').textContent.includes('main slot')")
+    assert page.is_checked("#opt-today-main") and page.input_value("#caption") == "JavaScript runtimes explained"
+    assert not page.errors
+
+
+def test_reuse_link_opens_a_trial_as_todays_main(page, settings, media_dir):
+    _seed_trials(settings, media_dir)
+    page.goto(page.url.split("#")[0].split("?")[0] + "?reuse=p_win")
+    page.wait_for_selector("#tab-post.active")
+    page.wait_for_function("document.querySelector('#opt-today-main').checked")
+    assert "Loaded from My posts" in page.inner_text("#upload-status")
+    assert "reuse=" not in page.url
+    assert not page.errors

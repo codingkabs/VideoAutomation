@@ -348,7 +348,8 @@ def test_digest_text(settings, tr):
 
 
 def test_housekeeping_refreshes_then_waits_and_sends_digest_once(settings, tr):
-    _with(settings, telegram_bot_token="bot", telegram_owner_chat_id="42", stats_refresh_hours=6)
+    _with(settings, telegram_bot_token="bot", telegram_owner_chat_id="42", stats_refresh_hours=6,
+          briefing_time="off", main_reminder_hours=0)  # the briefing has its own tests
     add_job(tr, "ig", "p1", "instagram", "published", published("instagram", platform_post_id="m1"))
     session = FakeSession({
         ("GET", "/m1/insights"): FakeResponse(data={"data": [{"name": "views", "values": [{"value": 9}]}]}),

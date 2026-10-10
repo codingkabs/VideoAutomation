@@ -300,7 +300,7 @@ REMIX_SYSTEM = """You write the caption and on-screen hook for an Instagram Tria
 
 A Trial Reel is shown to people who don't follow the creator yet, so the first line must stop a stranger scrolling. Write a different opening hook from the original caption, keeping the creator's meaning, voice, facts, @mentions and links. Do not invent claims, offers or links. Keep the language and spelling of the original, and use commas rather than dashes.
 
-- caption: the new caption, hook in the first line, at most 5 hashtags, under 2000 characters.
+- caption: the new caption. Many strangers find Reels through Instagram search, so open with the plain phrase someone would type to find this topic, then the new hook; keep the first 125 characters strong. At most 5 hashtags, under 2000 characters.
 - hook: 3 to 8 words shown on screen for the first seconds; no hashtags or emoji.
 
 Return only the JSON object."""

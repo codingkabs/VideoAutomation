@@ -179,6 +179,13 @@ td .link { font-size: .85rem; }
 
 /* ---------------------------------------------------------------- trials */
 .trial { border: 1px solid var(--line); border-radius: 12px; padding: .8rem .9rem; margin-bottom: .8rem; }
+.trial .tcap { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tmeter { position: relative; height: 8px; border-radius: 4px; background: var(--panel-2); margin: .45rem 0 .3rem; }
+.tmeter-fill { height: 100%; border-radius: 4px; background: var(--muted); }
+.tmeter-fill.ok { background: var(--ok); } .tmeter-fill.bad { background: var(--bad); }
+.tmeter-fill.info { background: var(--info); } .tmeter-fill.warn { background: var(--warn); }
+.tmeter-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: .5; }
+.tlinks { display: flex; gap: .9rem; align-items: center; margin-top: .3rem; }
 
 /* ----------------------------------------------------------------- setup */
 .checks { display: grid; gap: .1rem; }

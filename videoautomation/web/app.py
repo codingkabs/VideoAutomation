@@ -236,6 +236,14 @@ def create_app(settings: Settings):
             })
         return rows
 
+    @app.get("/api/health")
+    def health():
+        """Is vauto up, and which platforms are set up? From settings only: no calls to any platform."""
+        return jsonify({"ok": True, "platforms": {r["key"]: {"name": r["name"], "ready": r["ready"]}
+                                                  for r in platform_rows() if r["status"] != "planned"},
+                        "slots": {"main": cfg().main_slots, "trial": cfg().trial_slots,
+                                  "trial_daily_max": cfg().trial_daily_max}})
+
     @app.get("/api/status")
     def status():
         s = cfg()
@@ -641,6 +649,21 @@ def create_app(settings: Settings):
         else:
             raise VautoError("unknown action")
         return jsonify(result.to_dict())
+
+    @app.get("/api/trial-results")
+    def trial_results():
+        """Recent Trial Reels judged against your usual trial. Uses saved numbers only, so it
+        never calls Instagram (the worker refreshes numbers every few hours)."""
+        from .. import trials
+
+        if not cfg().db_path.is_file():
+            return jsonify({"trials": [], "baseline": None})
+        results = trials.collect(JobStore(cfg().db_path), limit=min(int(request.args.get("limit", 30)), 200))
+        base = trials.baseline(results)
+        return jsonify({
+            "baseline": base,
+            "trials": [{**r.to_dict(), "summary": trials.describe(r, base)} for r in results],
+        })
 
     @app.get("/api/trials")
     def trials():

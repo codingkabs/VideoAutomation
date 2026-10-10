@@ -174,6 +174,9 @@ class Settings:
     best_times: str = DEFAULT_BEST_TIMES
     main_slots: str = DEFAULT_MAIN_SLOTS  # --at slot:main picks the next free one
     trial_slots: str = DEFAULT_TRIAL_SLOTS  # --at slot:trial picks the next free one
+    trial_daily_max: int = 5  # Instagram can switch Trial Reels off for accounts that post too many in a day
+    briefing_time: str = "08:00"  # morning Telegram message: today's slots and trial results ("off" = none)
+    main_reminder_hours: float = 3.0  # nudge this long before an empty main slot (0 = off)
     trial_default: bool = False
     trial_delay_minutes: tuple[int, int] = (60, 120)
     trial_graduation: str = "MANUAL"
@@ -317,6 +320,9 @@ class Settings:
             best_times=g("VAUTO_BEST_TIMES") or DEFAULT_BEST_TIMES,
             main_slots=g("VAUTO_MAIN_SLOTS") or DEFAULT_MAIN_SLOTS,
             trial_slots=g("VAUTO_TRIAL_SLOTS") or DEFAULT_TRIAL_SLOTS,
+            trial_daily_max=max(1, int(g("VAUTO_TRIAL_DAILY_MAX") or 5)),
+            briefing_time=(g("VAUTO_BRIEFING") or "08:00").strip().lower(),
+            main_reminder_hours=max(0.0, float(g("VAUTO_MAIN_REMINDER_HOURS") or 3)),
             trial_default=_bool(g("VAUTO_TRIAL_DEFAULT")),
             trial_delay_minutes=_range(g("VAUTO_TRIAL_DELAY"), (60, 120)),
             trial_graduation=graduation,

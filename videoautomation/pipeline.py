@@ -565,7 +565,49 @@ def _plan_photos(req, settings, images: list[MediaInfo], work: Path, texts, plan
 # ------------------------------------------------------------------ execution
 
 
+def _over_trial_cap(plan: PostPlan, settings: Settings) -> list[PostJob]:
+    """Trial Reels that would take their day past VAUTO_TRIAL_DAILY_MAX (Instagram can switch
+    Trial Reels off for accounts that post too many in a day)."""
+    from .timing import zone
+
+    trials_in_plan = [j for j in plan.jobs if j.surface == "trial_reel"]
+    if not trials_in_plan:
+        return []
+    tz = zone(settings)
+    existing: list[str] = []
+    if settings.db_path.is_file():  # previews read the real queue but never write to it
+        store = JobStore(settings.db_path)
+        since = iso(utcnow() - timedelta(days=2))
+        known = {j.idem_key for j in trials_in_plan}
+        existing = [r.run_at for r in store.reel_rows(since)
+                    if r.job.surface == "trial_reel" and r.idem_key not in known]
+    per_day: dict[str, int] = {}
+    for run_at in existing:
+        day = parse_iso(run_at).astimezone(tz).date().isoformat()
+        per_day[day] = per_day.get(day, 0) + 1
+    over = []
+    for job in trials_in_plan:
+        day = (parse_iso(job.run_at) if job.run_at else utcnow()).astimezone(tz).date().isoformat()
+        if per_day.get(day, 0) >= settings.trial_daily_max:
+            over.append(job)
+        else:
+            per_day[day] = per_day.get(day, 0) + 1
+    return over
+
+
 def execute(plan: PostPlan, settings: Settings, req: PostRequest) -> list[PostResult]:
+    from .timing import zone
+
+    over = _over_trial_cap(plan, settings)
+    if over:
+        refused = {j.idem_key for j in over}
+        refused |= {j.idem_key for j in plan.jobs if j.depends_on in refused}  # their results checks
+        for job in over:
+            day = (parse_iso(job.run_at) if job.run_at else utcnow()).astimezone(zone(settings)).strftime("%a %d %b")
+            plan.results.append(PostResult(job.platform, job.surface, "failed", error=(
+                f"{day} already has {settings.trial_daily_max} Trial Reels, the most Instagram allows without "
+                "risking a pause on Trial Reels. Pick another day (or change VAUTO_TRIAL_DAILY_MAX)")))
+        plan.jobs = [j for j in plan.jobs if j.idem_key not in refused]
     store = JobStore(Path(":memory:") if req.dry_run else settings.db_path)
     raw_storage = make_storage(settings, dry_run=req.dry_run)
     storage = CachedStorage(raw_storage) if raw_storage else None

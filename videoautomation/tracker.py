@@ -618,4 +618,10 @@ def housekeeping(settings: Settings, tracker: Tracker, now: datetime | None = No
         if notify.send(settings, digest_text(settings, tracker, days=days, now=now), session):
             mark_digest_sent(settings, tracker, now)
             done.append("digest sent")
+    try:
+        from . import briefing
+
+        done += briefing.run(settings, tracker, now, session)
+    except Exception as exc:  # a briefing problem must never stop the worker
+        done.append(f"briefing skipped: {exc}")
     return done

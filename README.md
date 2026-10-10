@@ -369,6 +369,27 @@ Set the day's times once: `VAUTO_MAIN_SLOTS` (default `18:00`) and `VAUTO_TRIAL_
 - Other Trial Reels (for example from your own video-making pipeline) use `--trial-only --at slot:trial` and fill the remaining trial slots.
 - `GET /api/slots?date=2026-10-09` lists the day's slots and what holds each one.
 - Posts routed through Zernio are normally scheduled on Zernio's side. Add `--local-queue` (`local_queue` in the API) to keep them in vauto's queue instead, so `vauto jobs --cancel` or `POST /api/posts/<post_id>/cancel` can stop them until their time; `vauto worker` sends them.
+- **My posts → Today's slots** shows the day's four slots and what holds each; **Fill** opens the Post screen set up for that slot. After the last slot it shows tomorrow.
+- **Daily cap.** Instagram can pause Trial Reels for accounts that post too many in a day, so vauto refuses a Trial Reel that would make a day's sixth (`VAUTO_TRIAL_DAILY_MAX`, default 5). Previews check it too.
+
+### Which trials won
+
+Instagram judges a Trial Reel over 72 hours on how strangers respond. Raw views mislead, so vauto compares each Trial Reel with **your usual trial**: the median views and the median shares + saves per 1,000 views of your recent trials (once 3 have numbers after a day).
+
+- **Winner**: 1.5× your usual views, or 1.5× the shares + saves per view with decent views. Share it with your followers from the Instagram app (Profile → Reels → Trials → Share), or post it again as a fresh main Reel: the briefing and the 72-hour message include a link (`/?reuse=POST_ID`) that loads it as Today's main.
+- **About usual** / **Below usual**: leave it; the next version tests a different hook.
+- **First day**: numbers before 24 hours are a first look, not a verdict.
+
+The **Stats → Trial Reels** card lists them with their verdicts. It uses the numbers vauto has saved (the worker refreshes them every `VAUTO_STATS_REFRESH_HOURS`), so opening it never calls Instagram. `GET /api/trial-results` returns the same as JSON.
+
+### Morning briefing and reminders
+
+With Telegram notifications set up, the worker sends:
+
+- **A morning briefing** at `VAUTO_BRIEFING` (default `08:00`; `off` turns it off): today's slots and what holds each, and the last four days of Trial Reels with their verdicts and the winners' links.
+- **A main-slot reminder** `VAUTO_MAIN_REMINDER_HOURS` before an empty main slot (default 3 hours; `0` turns it off).
+
+`GET /api/health` answers from vauto's settings alone (which platforms are set up, the slot times); tools use it to check vauto is reachable without calling any platform.
 
 ---
 

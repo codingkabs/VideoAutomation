@@ -77,8 +77,13 @@
               <div id="comment-hint" class="muted small"></div>
             </div>
           </div>
+          <div class="card card-today">
+            <label class="toggle"><input type="checkbox" id="opt-today-main"> <span><b>Today's main</b> — main Reel at your main time, plus a remixed Trial Reel in a trial slot</span></label>
+            <div id="today-note" class="muted small"></div>
+          </div>
           <div class="card card-options">
-            <h2>Options <span class="muted small">(all optional)</span></h2>
+            <details id="more-options">
+            <summary><h2>More options</h2> <span class="muted small">drafts, Trial Reel, Story, subtitles, when</span></summary>
             <div class="option-row">
               <label class="toggle"><input type="checkbox" id="opt-drafts"> <span><b>Save as drafts</b> — don't publish yet. TikTok goes to your drafts, YouTube uploads as private, the rest wait in My posts for you to post</span></label>
               <div id="draft-options" class="sub-options" hidden>
@@ -86,10 +91,6 @@
                 <div id="draft-chips" class="chips"></div>
                 <div id="draft-hint" class="muted small"></div>
               </div>
-            </div>
-            <div class="option-row">
-              <label class="toggle"><input type="checkbox" id="opt-today-main"> <span><b>Today's main</b> — main Reel at your main time, plus a remixed Trial Reel in a trial slot</span></label>
-              <div id="today-note" class="muted small"></div>
             </div>
             <div class="option-row">
               <label class="toggle"><input type="checkbox" id="opt-trial"> <span><b>Instagram Trial Reel</b> — zoomed version for non-followers, later</span></label>
@@ -122,13 +123,14 @@
               <div id="best-note" class="muted small"></div>
             </div>
             <details>
-              <summary>More</summary>
+              <summary>Advanced</summary>
               <div class="sub-options">
                 <label>Fit to vertical
                   <select id="opt-fit"><option value="auto">Auto</option><option value="blur">Blurred background</option><option value="crop">Crop to fill</option><option value="pad">Black bars</option></select></label>
                 <label class="toggle"><input type="checkbox" id="opt-trim"> <span>Trim to each platform's max length</span></label>
                 <label class="toggle"><input type="checkbox" id="opt-force"> <span>Post again even if already posted</span></label>
               </div>
+            </details>
             </details>
           </div>
 

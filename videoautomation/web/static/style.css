@@ -69,7 +69,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 1.2rem 1rem 4rem; }
   /* one column in posting order: video, caption, where, options, then the Post button */
   .grid { display: flex; flex-direction: column; align-items: stretch; }
   .col { display: contents; }
-  .card-media { order: 1; } .card-caption { order: 2; } .card-where { order: 3; } .card-options { order: 4; }
+  .card-media { order: 1; } .card-caption, .card-today { order: 2; } .card-where { order: 3; } .card-options { order: 4; }
   .grid .actions { order: 5; } .grid .progress { order: 6; }
   .topbar { flex-wrap: wrap; padding: .6rem 1rem; }
   .tabs { order: 3; flex-basis: 100%; }
@@ -425,3 +425,10 @@ details.plat[open] > summary::after { transform: rotate(90deg); }
 
 .yourself { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .2rem; }
 #draft-chips { margin: .4rem 0; }
+
+/* Today's main: the everyday choice, so it sits on its own under the caption */
+.card-today { border-color: var(--accent); background: var(--accent-soft); }
+.card-today .toggle { margin: 0; }
+#more-options > summary h2 { margin: 0; color: var(--text); white-space: nowrap; }
+#more-options > summary .muted { margin-left: .4rem; }
+#more-options[open] > summary { margin-bottom: .6rem; }

@@ -156,7 +156,7 @@ function renderPicker() {
     const items = platforms.filter((p) => p.status !== "planned" && test(p));
     if (!items.length) continue;
     const picked = items.filter((p) => state.selected.has(p.key)).length;
-    if (!state.openGroups) state.openGroups = new Set(["UK core", "Global"]);
+    if (!state.openGroups) state.openGroups = new Set(["UK core"]);  // the rest open when you pick from them
     if (picked) state.openGroups.add(title);
     const chips = el("div", { class: "chips" }, items.map((p) => el("button", {
       type: "button", class: chipClass(p), "aria-pressed": String(state.selected.has(p.key)),
@@ -414,7 +414,15 @@ function baseOptions(at) {
 }
 
 // ------------------------------------------------------------ preview/post
+// "More options" stays folded until one of its options is in use (a default, Fill, Post again).
+function openMoreOptionsIfUsed() {
+  const used = ["#opt-drafts", "#opt-trial", "#opt-draft", "#opt-story", "#opt-trim", "#opt-force"].some((id) => $(id)?.checked)
+    || $("#opt-subtitles")?.value || $("#opt-when")?.value;
+  if (used && $("#more-options")) $("#more-options").open = true;
+}
+
 function updateButtons() {
+  openMoreOptionsIfUsed();
   const ok = !!state.upload && state.selected.size > 0 && !state.busy;
   $("#btn-preview").disabled = !ok;
   $("#btn-post").disabled = !ok;

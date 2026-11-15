@@ -325,6 +325,32 @@ def test_web_password_and_path_safety(settings, tmp_path):
     assert client.get("/media/x/..%2F..%2Fjobs.db", headers=ok).status_code == 404
 
 
+def test_healthz_is_public_but_says_nothing_else(settings):
+    pytest.importorskip("flask")
+    from videoautomation.web.app import create_app
+
+    settings.web_password = "s3cret"
+    client = create_app(settings).test_client()
+    assert client.get("/healthz").get_json() == {"ok": True}
+    assert client.get("/api/health").status_code == 401  # the detailed one still needs the password
+
+
+def test_web_worker_flag_runs_the_worker_alongside(settings, monkeypatch):
+    from videoautomation import cli
+    from videoautomation.web import app as web_app
+
+    started = []
+    monkeypatch.setattr(cli, "cmd_worker", lambda args, s: started.append(args))
+    monkeypatch.setattr(web_app, "run", lambda s, host, port: started.append((host, port)))
+    monkeypatch.setenv("PORT", "4321")
+    args = cli.build_parser().parse_args(["web", "--host", "0.0.0.0", "--worker"])
+    assert cli.cmd_web(args, settings) == 0
+    import time
+    time.sleep(0.2)  # the worker starts on its own thread
+    assert ("0.0.0.0", 4321) in started
+    assert any(getattr(a, "interval", None) == 30.0 and a.once is False for a in started)
+
+
 def test_web_refuses_open_host_without_password(settings):
     from videoautomation.errors import ConfigError
     from videoautomation.web.app import run

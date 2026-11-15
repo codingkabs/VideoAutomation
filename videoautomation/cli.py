@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import threading
 from pathlib import Path
 
 from . import auth, service
@@ -195,7 +197,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     web = sub.add_parser("web", help="open the web app")
     web.add_argument("--host", default="127.0.0.1")
-    web.add_argument("--port", type=int, default=8765)
+    web.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8765),
+                     help="default: $PORT when the host sets one (Railway), else 8765")
+    web.add_argument("--worker", action="store_true",
+                     help="also run the worker in this process (hosts that run one process per service)")
 
     probe_cmd = sub.add_parser("probe", help="show media details")
     probe_cmd.add_argument("files", nargs="+", type=Path)
@@ -749,6 +754,9 @@ def cmd_phone(args: argparse.Namespace, settings: Settings) -> int:
 def cmd_web(args: argparse.Namespace, settings: Settings) -> int:
     from .web.app import run
 
+    if getattr(args, "worker", False):
+        worker_args = argparse.Namespace(interval=30.0, once=False)
+        threading.Thread(target=cmd_worker, args=(worker_args, settings), name="vauto-worker", daemon=True).start()
     run(settings, args.host, args.port)
     return 0
 

@@ -166,6 +166,17 @@ docker compose --profile bot --profile bigfiles up -d     # + phone videos over 
 - Add `--build-arg EXTRAS=all` to `docker compose build` for automatic subtitles in the image (larger).
 - Browser-automation platforms (Rutube, Likee, Dzen, Naver Clip) need a visible browser for the one-time login, so run those from a normal install on a desktop.
 
+### Or on Railway
+
+Railway runs one process per service, so the web app and the worker share one (`vauto web --worker`); `railway.json` sets that up.
+
+1. In a Railway project: **New** > **GitHub repo** > this repo. It builds from the `Dockerfile`.
+2. **Settings** > add a **volume** mounted at `/data` (the queue, renders and saved tokens).
+3. **Variables**: paste your `.env` (Raw Editor). `VAUTO_WEB_PASSWORD` is required, since the app is on the internet.
+4. **Settings** > **Networking** > **Generate domain**. That address replaces the Tailscale one (also in other apps' `VAUTO_URL`).
+
+Don't run `vauto bot` there if another program already reads the same Telegram bot; sending messages with the same token is fine.
+
 ---
 
 ## Setup, step by step

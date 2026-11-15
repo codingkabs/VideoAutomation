@@ -35,7 +35,8 @@ TASK_TTL = 6 * 3600
 JSON_EXEMPT = ("/api/upload", "/api/subtitles")  # file uploads; every other API write must be JSON
 AUTH_COOKIE = "vauto_auth"
 AUTH_DAYS = 400  # browsers cap cookie lifetimes at 400 days
-PUBLIC_PATHS = ("/login", "/logout", "/manifest.webmanifest", "/sw.js")  # no data: the sign-in page and app shell
+PUBLIC_PATHS = ("/login", "/logout", "/manifest.webmanifest", "/sw.js",  # no data: the sign-in page and app shell
+                "/healthz")  # just "ok", for a host's health check (Railway)
 
 
 def create_app(settings: Settings):
@@ -235,6 +236,11 @@ def create_app(settings: Settings):
                 "guide": platform_guide(key), "rate_limit": spec.get("rate_limit"),
             })
         return rows
+
+    @app.get("/healthz")
+    def healthz():
+        """Up or not, for a host's health check. Public, so it says nothing else."""
+        return jsonify({"ok": True})
 
     @app.get("/api/health")
     def health():

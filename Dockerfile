@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir ".[${EXTRAS}]"
 # renders, the queue, tokens and the outbox live in /data.
 ENV VAUTO_HOME=/data PYTHONUNBUFFERED=1
 WORKDIR /config
-VOLUME ["/data"]
+# /data is a mounted volume (docker-compose maps ./data; on Railway, attach a volume at /data).
+# No VOLUME line: Railway refuses Dockerfiles that declare one.
 EXPOSE 8765
 
 CMD ["vauto", "web", "--host", "0.0.0.0", "--port", "8765"]
